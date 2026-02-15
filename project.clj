@@ -2,4 +2,4 @@
   :description "Interactive fractal art generator in Clojure"
   :dependencies [[org.clojure/clojure "1.11.1"]
                  [quil "4.3.1563"]]
-  :main fractal-explorer.core)
+  :main core)

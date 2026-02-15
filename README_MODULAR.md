@@ -7,14 +7,18 @@ A modular visual programming environment for creating fractal art in Clojure. Th
 The system is built around 4 core module types:
 
 ### 🎛️ **Generators** (`modules/generators.clj`)
+
 Generate raw visual signals:
+
 - `MandelbrotGenerator` - Classic Mandelbrot set
 - `JuliaGenerator` - Julia set fractals (with configurable c parameter)
 - `BurningShipGenerator` - Burning Ship fractal
 - `NoiseGenerator` - Perlin noise fields
 
 ### 🎨 **Effects** (`modules/effects.clj`)
+
 Process and transform visual signals:
+
 - `ColorMapper` - Map iteration values to colors (classic, fire, ocean, psychedelic)
 - `MotionBlur` - Create trailing/ghosting effects
 - `RippleDistortion` - Sinusoidal wave distortion
@@ -25,7 +29,9 @@ Process and transform visual signals:
 - `Feedback` - Blend with previous frames
 
 ### 🎚️ **Modulators** (`modules/modulators.clj`)
+
 Control parameters over time:
+
 - `LFO` - Low frequency oscillators (sine, triangle, square, saw)
 - `Envelope` - ADSR-style envelopes
 - `MouseModulator` - Map mouse position to parameters
@@ -34,7 +40,9 @@ Control parameters over time:
 - `ModMatrix` - Route multiple modulators to multiple parameters
 
 ### 🔌 **Patches** (`modules/patch.clj`)
+
 Combine generators, effects, and modulators into signal chains:
+
 ```
 Generator → Effect 1 → Effect 2 → ... → Renderer
               ↑          ↑
@@ -44,11 +52,13 @@ Generator → Effect 1 → Effect 2 → ... → Renderer
 ## Quick Start
 
 ### Run with the original simple version:
+
 ```bash
 lein run
 ```
 
 ### Run with modular architecture:
+
 ```bash
 lein run -m fractal-explorer.core-modular
 ```
@@ -73,26 +83,26 @@ lein run -m fractal-explorer.core-modular
 ## Creating Custom Patches in the REPL
 
 ```clojure
-(require '[fractal-explorer.modules.generators :as gen])
-(require '[fractal-explorer.modules.effects :as fx])
-(require '[fractal-explorer.modules.modulators :as mod])
-(require '[fractal-explorer.modules.patch :as patch])
+(require '[.generators :as gen])
+(require '[.effects :as fx])
+(require '[.modulators :as mod])
+(require '[.patch :as patch])
 
 ;; Create a custom patch
 (def my-patch
   (patch/create-patch
     ;; Generator
     (gen/make-mandelbrot)
-    
+
     ;; Effect chain
     [(fx/make-color-mapper :fire)
      (fx/make-ripple 0.1 20 1.5)
      (fx/make-particles 0.9 0.02)]
-    
+
     ;; Modulators
     [(mod/make-lfo 0.5 :sine)   ; Modulates over time
      (mod/make-mouse-mod :x)]   ; Mouse X controls a parameter
-    
+
     ;; Initial parameters
     {:width 800
      :height 600
@@ -122,17 +132,17 @@ Effects are applied in order, so you can create complex signal flows:
 (def complex-patch
   (patch/create-patch
     (gen/make-julia -0.8 0.156)
-    
+
     ;; Color first, then distort, then add particles
     [(fx/make-color-mapper :ocean)
      (fx/make-ripple 0.05 15 2.0)
      (fx/make-echo 2 8 8 1.5)
      (fx/make-hue-shift 0)
      (fx/make-particles 0.85 0.015)]
-    
+
     ;; LFO modulates hue shift
     [(mod/make-lfo 0.4 :sine)]
-    
+
     {...}))
 ```
 
@@ -145,23 +155,23 @@ Route multiple modulators to multiple parameters:
   (patch/create-patch
     (gen/make-mandelbrot)
     [(fx/make-color-mapper :psychedelic)]
-    
+
     [(mod/make-mod-matrix
       [{:modulator (mod/make-lfo 0.2 :sine)
         :param :zoom
         :min 1.0
         :max 5.0}
-       
+
        {:modulator (mod/make-lfo 0.3 :triangle)
         :param :center-x
         :min -1.0
         :max 0.0}
-       
+
        {:modulator (mod/make-mouse-mod :x)
         :param :max-iter
         :min 50
         :max 200}])]
-    
+
     {...}))
 ```
 
@@ -223,6 +233,7 @@ BurningShip → ColorMapper(fire) → MotionBlur → Screen
 ## Philosophy
 
 This architecture lets you:
+
 - **Experiment** - Try different combinations in the REPL
 - **Compose** - Stack modules like Lego blocks
 - **Extend** - Add new generators/effects/modulators
