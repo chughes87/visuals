@@ -55,69 +55,6 @@
 
 (def scheme-order [:classic :fire :ocean :psychedelic])
 
-;; Visual effects
-(defn apply-motion-blur
-  "Blend current frame with previous frame for trails"
-  [state]
-  (when (:motion-blur state)
-    (q/push-style)
-    (q/fill 0 0 0 (* 255 0.15))  ; Adjust alpha for trail length
-    (q/rect 0 0 (q/width) (q/height))
-    (q/pop-style)))
-
-(defn calculate-ripple-offset
-  "Apply sinusoidal ripple distortion to coordinates"
-  [state x y]
-  (if (:ripple state)
-    (let [time (/ (q/frame-count) 30.0)
-          freq 0.05
-          amp (* 0.3 (/ 1.0 (:zoom state)))
-          dx (* amp (Math/sin (+ (* y freq) (* time 2))))
-          dy (* amp (Math/sin (+ (* x freq) (* time 1.5))))]
-      [(+ x dx) (+ y dy)])
-    [x y]))
-
-(defn spawn-particles
-  "Generate particles at high-iteration points"
-  [state iter max-iter px py]
-  (if (and (:particles state)
-           (> iter (* max-iter 0.8))
-           (< (rand) 0.02))
-    (update state :particle-list conj
-            {:x (double px)
-             :y (double py)
-             :vx (- (rand 2) 1)
-             :vy (- (rand 2) 1)
-             :life 1.0
-             :color [(rand-int 255) (rand-int 255) (rand-int 255)]})
-    state))
-
-(defn update-particles
-  "Update particle positions and lifetimes"
-  [state]
-  (if (:particles state)
-    (assoc state :particle-list
-           (->> (:particle-list state)
-                (map (fn [p]
-                       (-> p
-                           (update :x + (:vx p))
-                           (update :y + (:vy p))
-                           (update :life - 0.02))))
-                (filter #(> (:life %) 0))
-                (take 500)))  ; Limit particle count
-    state))
-
-(defn draw-particles
-  "Render active particles"
-  [state]
-  (when (:particles state)
-    (doseq [{:keys [x y life color]} (:particle-list state)]
-      (q/push-style)
-      (q/no-stroke)
-      (q/fill (first color) (second color) (nth color 2) (* 255 life))
-      (q/ellipse x y 3 3)
-      (q/pop-style))))
-
 ;; State management
 (defn setup []
   (q/frame-rate 30)
@@ -128,104 +65,42 @@
    :color-scheme :classic
    :scheme-index 0
    :width (q/width)
-   :height (q/height)
-   ;; Visual effects toggles
-   :motion-blur false
-   :fractal-echo false
-   :ripple false
-   :particles false
-   :feedback false
-   :particle-list []
-   :echo-layers 3
-   :feedback-buffer nil})
+   :height (q/height)})
 
 (defn screen-to-complex
   "Convert screen coordinates to complex plane coordinates"
   [state x y]
-  (let [[rx ry] (calculate-ripple-offset state x y)
-        aspect (/ (:width state) (:height state))
+  (let [aspect (/ (:width state) (:height state))
         scale (/ 4.0 (:zoom state))
-        cx (+ (:center-x state) (* (- (/ rx (:width state)) 0.5) scale aspect))
-        cy (+ (:center-y state) (* (- (/ ry (:height state)) 0.5) scale))]
+        cx (+ (:center-x state) (* (- (/ x (:width state)) 0.5) scale aspect))
+        cy (+ (:center-y state) (* (- (/ y (:height state)) 0.5) scale))]
     [cx cy]))
 
 (defn draw-state [state]
-  ;; Apply motion blur by drawing semi-transparent black rectangle
-  (if (:motion-blur state)
-    (apply-motion-blur state)
-    (q/background 0))
-  
-  ;; Apply feedback effect - blend with previous frame
-  (when (and (:feedback state) (:feedback-buffer state))
-    (q/push-style)
-    (q/tint 255 230)  ; Slight transparency
-    (q/image (:feedback-buffer state) 0 0)
-    (q/pop-style))
+  (q/background 0)
   
   (let [w (:width state)
         h (:height state)
         max-iter (:max-iter state)
-        scheme-fn (get color-schemes (:color-scheme state))
-        state-ref (atom state)]  ; For particle spawning
+        scheme-fn (get color-schemes (:color-scheme state))]
     
-    ;; Draw main fractal
-    (doseq [px (range 0 w 2)
+    (doseq [px (range 0 w 2)  ; Render every 2 pixels for speed
             py (range 0 h 2)]
-      (let [[cx cy] (screen-to-complex @state-ref px py)
+      (let [[cx cy] (screen-to-complex state px py)
             iter (mandelbrot-iterations cx cy max-iter)
             [r g b] (scheme-fn iter max-iter)]
         (q/fill r g b)
         (q/no-stroke)
-        (q/rect px py 2 2)
-        
-        ;; Spawn particles at interesting points
-        (swap! state-ref spawn-particles iter max-iter px py)))
-    
-    ;; Draw fractal echo layers
-    (when (:fractal-echo state)
-      (q/push-style)
-      (dotimes [layer (:echo-layers state)]
-        (let [offset (* (inc layer) 5)
-              scale-factor (- 1.0 (* layer 0.1))
-              alpha (/ 100 (inc layer))]
-          (doseq [px (range 0 w 4)
-                  py (range 0 h 4)]
-            (let [scaled-x (+ (* (- px (/ w 2)) scale-factor) (/ w 2) offset)
-                  scaled-y (+ (* (- py (/ h 2)) scale-factor) (/ h 2) offset)
-                  [cx cy] (screen-to-complex state scaled-x scaled-y)
-                  iter (mandelbrot-iterations cx cy max-iter)
-                  [r g b] (scheme-fn iter max-iter)]
-              (q/fill r g b alpha)
-              (q/no-stroke)
-              (q/rect px py 4 4)))))
-      (q/pop-style))
-    
-    ;; Draw particles
-    (draw-particles @state-ref)
-    
-    ;; Store current frame for feedback effect
-    (let [new-state (if (:feedback state)
-                      (assoc @state-ref :feedback-buffer (q/get-pixel 0 0 w h))
-                      @state-ref)]
-      
-      ;; Display info
-      (q/fill 255 255 255 200)
-      (q/text-size 12)
-      (q/text (str "Zoom: " (format "%.2f" (:zoom state)) "x | "
-                   "Iterations: " (:max-iter state) " | "
-                   "Color: " (name (:color-scheme state)) "\n"
-                   "Effects: "
-                   (when (:motion-blur state) "BLUR ")
-                   (when (:fractal-echo state) "ECHO ")
-                   (when (:ripple state) "RIPPLE ")
-                   (when (:particles state) "PARTICLES ")
-                   (when (:feedback state) "FEEDBACK ")
-                   "\n"
-                   "Click=zoom | Space=color | +/-=detail | 1-5=toggle effects | R=reset")
-              10 20)
-      
-      ;; Return updated state with new particle list
-      new-state)))
+        (q/rect px py 2 2))))
+  
+  ;; Display info
+  (q/fill 255 255 255 200)
+  (q/text-size 14)
+  (q/text (str "Zoom: " (format "%.2f" (:zoom state)) "x\n"
+               "Max iterations: " (:max-iter state) "\n"
+               "Color: " (name (:color-scheme state)) "\n"
+               "Click to zoom in | Space: cycle colors | +/-: iterations")
+          10 20))
 
 (defn mouse-clicked [state event]
   (let [[cx cy] (screen-to-complex state (:x event) (:y event))]
