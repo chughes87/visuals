@@ -1,7 +1,0 @@
-(or 1 0
-)
-(or 0 1)
-(or true false)
-(or false true)
-(max 0 1)
-exit
