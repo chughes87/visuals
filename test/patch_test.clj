@@ -114,4 +114,34 @@
           p      (patch/create-patch test-generator [test-effect hue-shifted-mapper] [] test-params)
           result (patch/process-patch p)]
       ;; Just verifying the pipeline runs without error and produces output
-      (is (seq (:pixel-data result))))))
+      (is (seq (:pixel-data result)))))
+
+  (testing "result contains an updated :patch"
+    (let [p      (patch/create-patch test-generator [test-effect] [] test-params)
+          result (patch/process-patch p)]
+      (is (contains? result :patch))))
+
+  (testing "cache is populated after first process-patch"
+    (let [p      (patch/create-patch test-generator [] [] test-params)
+          result (patch/process-patch p)]
+      (is (some? (get-in result [:patch :gen-cache])))
+      (is (some? (get-in result [:patch :last-gen-params])))))
+
+  (testing "cache is reused when generator-relevant params are unchanged"
+    (let [p       (patch/create-patch test-generator [] [] test-params)
+          result1 (patch/process-patch p)
+          cached  (get-in result1 [:patch :gen-cache])
+          ;; Second call with same params - only :time changes, which
+          ;; MandelbrotGenerator does not read
+          p2      (patch/update-patch-params (:patch result1) {:time 99.0})
+          result2 (patch/process-patch p2)]
+      (is (identical? cached (get-in result2 [:patch :gen-cache])))))
+
+  (testing "cache is invalidated when generator-relevant params change"
+    (let [p       (patch/create-patch test-generator [] [] test-params)
+          result1 (patch/process-patch p)
+          cached  (get-in result1 [:patch :gen-cache])
+          ;; Change max-iter, which MandelbrotGenerator reads
+          p2      (patch/update-patch-params (:patch result1) {:max-iter 5})
+          result2 (patch/process-patch p2)]
+      (is (not (identical? cached (get-in result2 [:patch :gen-cache])))))))

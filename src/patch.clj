@@ -7,15 +7,17 @@
 ;; A patch is a signal flow graph
 ;; generator -> [effects] -> renderer
 
-(defrecord Patch [generator effects modulators params])
+(defrecord Patch [generator effects modulators params gen-cache last-gen-params])
 
 (defn create-patch
   "Create a new patch with generator, effect chain, and modulators"
   [generator effects modulators initial-params]
-  (->Patch generator effects modulators initial-params))
+  (->Patch generator effects modulators initial-params nil nil))
 
 (defn process-patch
-  "Process a patch: apply modulators, generate signal, apply effects"
+  "Process a patch: apply modulators, generate signal, apply effects.
+  Returns {:pixel-data … :params … :patch …} where :patch carries the
+  updated cache so callers can store it for the next frame."
   [patch]
   (let [;; Apply modulators - they should return modified params map
         ;; ModMatrix is the only modulator that actually modifies params
@@ -31,17 +33,26 @@
                                    (:params patch)
                                    (:modulators patch)))
 
-        ;; Generate base signal
-        pixel-data (gen/generate (:generator patch) modulated-params)
+        ;; Determine which params the generator actually reads
+        relevant-keys    (gen/gen-params (:generator patch))
+        current-gen-params (select-keys modulated-params relevant-keys)
+
+        ;; Use cached pixel data when generator-relevant params haven't changed
+        [pixel-data updated-patch]
+        (if (= current-gen-params (:last-gen-params patch))
+          [(:gen-cache patch) patch]
+          (let [fresh (gen/generate (:generator patch) modulated-params)]
+            [fresh (assoc patch :gen-cache fresh :last-gen-params current-gen-params)]))
 
         ;; Apply effect chain
         processed-data (reduce (fn [data effect]
                                  (fx/process effect data modulated-params))
                                pixel-data
-                               (:effects patch))]
+                               (:effects updated-patch))]
 
     {:pixel-data processed-data
-     :params modulated-params}))
+     :params     modulated-params
+     :patch      (assoc updated-patch :params modulated-params)}))
 
 (defn update-patch-params
   "Update patch parameters (for user interaction)"

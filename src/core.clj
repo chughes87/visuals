@@ -71,9 +71,10 @@
         ;; Process the patch
         result (patch/process-patch patch)
 
-        ;; Update state
+        ;; Update state - use the patch returned by process-patch so the
+        ;; generator cache persists into the next frame
         new-state (-> state
-                      (assoc :patch (assoc patch :params (:params result)))
+                      (assoc :patch (:patch result))
                       (assoc :pixel-data (:pixel-data result))
                       (update :frame inc))]
     new-state))
