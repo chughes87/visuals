@@ -29,14 +29,13 @@
     (let [{:keys [width height center-x center-y zoom max-iter]} params
           aspect (/ width (max height 1))
           scale (/ 4.0 (max zoom 1))
-          pixel-data (atom [])]
-      (doseq [py (range 0 height 2)
-              px (range 0 width 2)]
-        (let [cx (+ center-x (* (- (/ px (max width 1)) 0.5) scale aspect))
-              cy (+ center-y (* (- (/ py (max height 1)) 0.5) scale))
-              iter (mandelbrot-iterations cx cy max-iter)]
-          (swap! pixel-data conj {:x px :y py :value iter :max-value max-iter})))
-      @pixel-data)))
+          coords (for [py (range 0 height 2) px (range 0 width 2)] [px py])]
+      (pmap (fn [[px py]]
+              (let [cx (+ center-x (* (- (/ px (max width 1)) 0.5) scale aspect))
+                    cy (+ center-y (* (- (/ py (max height 1)) 0.5) scale))
+                    iter (mandelbrot-iterations cx cy max-iter)]
+                {:x px :y py :value iter :max-value max-iter}))
+            coords))))
 
 ;; Julia set generator
 (defn julia-iterations
@@ -60,14 +59,13 @@
     (let [{:keys [width height center-x center-y zoom max-iter]} params
           aspect (/ width height)
           scale (/ 4.0 (max zoom 1))
-          pixel-data (atom [])]
-      (doseq [py (range 0 height 2)
-              px (range 0 width 2)]
-        (let [zx (+ center-x (* (- (/ px width) 0.5) scale aspect))
-              zy (+ center-y (* (- (/ py height) 0.5) scale))
-              iter (julia-iterations zx zy c-real c-imag max-iter)]
-          (swap! pixel-data conj {:x px :y py :value iter :max-value max-iter})))
-      @pixel-data)))
+          coords (for [py (range 0 height 2) px (range 0 width 2)] [px py])]
+      (pmap (fn [[px py]]
+              (let [zx (+ center-x (* (- (/ px width) 0.5) scale aspect))
+                    zy (+ center-y (* (- (/ py height) 0.5) scale))
+                    iter (julia-iterations zx zy c-real c-imag max-iter)]
+                {:x px :y py :value iter :max-value max-iter}))
+            coords))))
 
 ;; Perlin noise generator
 (defrecord NoiseGenerator [scale octaves]
@@ -105,14 +103,13 @@
     (let [{:keys [width height center-x center-y zoom max-iter]} params
           aspect (/ width height)
           scale (/ 4.0 (max zoom 1))
-          pixel-data (atom [])]
-      (doseq [py (range 0 height 2)
-              px (range 0 width 2)]
-        (let [cx (+ center-x (* (- (/ px width) 0.5) scale aspect))
-              cy (+ center-y (* (- (/ py height) 0.5) scale))
-              iter (burning-ship-iterations cx cy max-iter)]
-          (swap! pixel-data conj {:x px :y py :value iter :max-value max-iter})))
-      @pixel-data)))
+          coords (for [py (range 0 height 2) px (range 0 width 2)] [px py])]
+      (pmap (fn [[px py]]
+              (let [cx (+ center-x (* (- (/ px width) 0.5) scale aspect))
+                    cy (+ center-y (* (- (/ py height) 0.5) scale))
+                    iter (burning-ship-iterations cx cy max-iter)]
+                {:x px :y py :value iter :max-value max-iter}))
+            coords))))
 
 ;; Factory functions
 (defn make-mandelbrot [] (->MandelbrotGenerator))
