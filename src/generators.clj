@@ -4,7 +4,8 @@
 
 ;; Protocol for all generators
 (defprotocol Generator
-  (generate [this params] "Generate visual data based on parameters"))
+  (generate [this params] "Generate visual data based on parameters")
+  (gen-params [this] "Return the set of param keys this generator reads from params"))
 
 ;; Mandelbrot generator
 (defn mandelbrot-iterations
@@ -23,6 +24,7 @@
 
 (defrecord MandelbrotGenerator []
   Generator
+  (gen-params [this] #{:width :height :center-x :center-y :zoom :max-iter})
   (generate [this params]
     (let [{:keys [width height center-x center-y zoom max-iter]} params
           aspect (/ width (max height 1))
@@ -53,6 +55,7 @@
 
 (defrecord JuliaGenerator [c-real c-imag]
   Generator
+  (gen-params [this] #{:width :height :center-x :center-y :zoom :max-iter})
   (generate [this params]
     (let [{:keys [width height center-x center-y zoom max-iter]} params
           aspect (/ width height)
@@ -69,6 +72,7 @@
 ;; Perlin noise generator
 (defrecord NoiseGenerator [scale octaves]
   Generator
+  (gen-params [this] #{:width :height :time})
   (generate [this params]
     (let [{:keys [width height time]} params
           pixel-data (atom [])]
@@ -96,6 +100,7 @@
 
 (defrecord BurningShipGenerator []
   Generator
+  (gen-params [this] #{:width :height :center-x :center-y :zoom :max-iter})
   (generate [this params]
     (let [{:keys [width height center-x center-y zoom max-iter]} params
           aspect (/ width height)

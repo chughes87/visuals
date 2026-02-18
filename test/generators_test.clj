@@ -72,3 +72,22 @@
       (is (every? #(and (contains? % :x) (contains? % :y)
                         (contains? % :value) (contains? % :max-value))
                   result)))))
+
+;; --- gen-params ---
+
+(deftest gen-params-test
+  (testing "mandelbrot declares fractal keys"
+    (is (= #{:width :height :center-x :center-y :zoom :max-iter}
+           (gen/gen-params (gen/make-mandelbrot)))))
+  (testing "julia declares fractal keys"
+    (is (= #{:width :height :center-x :center-y :zoom :max-iter}
+           (gen/gen-params (gen/make-julia -0.7 0.27015)))))
+  (testing "burning-ship declares fractal keys"
+    (is (= #{:width :height :center-x :center-y :zoom :max-iter}
+           (gen/gen-params (gen/make-burning-ship)))))
+  (testing "noise declares time-dependent keys"
+    (is (= #{:width :height :time}
+           (gen/gen-params (gen/make-noise 0.01 4)))))
+  (testing "noise gen-params includes :time, unlike fractal generators"
+    (is (contains? (gen/gen-params (gen/make-noise 0.01 4)) :time))
+    (is (not (contains? (gen/gen-params (gen/make-mandelbrot)) :time)))))
