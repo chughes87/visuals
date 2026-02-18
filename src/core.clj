@@ -3,6 +3,7 @@
   (:require
    [patch :as patch]
    [presets :as presets :refer [load-preset]]
+   [quil.applet :as qa]
    [quil.core :as q]
    [quil.middleware :as m] ;; [generators :as gen]
    ))
@@ -23,7 +24,7 @@
   ;; fill, rect, pop-style) and replaces them with a single array write.
   (let [w      (q/width)
         h      (q/height)
-        applet (q/current-applet)]
+        applet (qa/current-applet)]
     (.loadPixels applet)
     (let [^ints px-buf (.-pixels applet)]
       (doseq [pixel pixel-data]
