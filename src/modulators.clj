@@ -13,7 +13,7 @@
           t (+ (* time frequency) phase)]
       (case waveform
         :sine (Math/sin t)
-        :triangle (- (* 2 (Math/abs (- (mod t (* 2 Math/PI)) Math/PI))) 1)
+        :triangle (- (* (/ 2.0 Math/PI) (Math/abs (- (mod t (* 2 Math/PI)) Math/PI))) 1)
         :square (if (< (mod t (* 2 Math/PI)) Math/PI) 1.0 -1.0)
         :saw (- (* 2 (/ (mod t (* 2 Math/PI)) (* 2 Math/PI))) 1)
         (Math/sin t)))))
@@ -67,8 +67,13 @@
 (defn map-range
   "Map value from input range to output range"
   [value in-min in-max out-min out-max]
-  (+ out-min (* (- out-max out-min)
-                (/ (- value in-min) (- in-max in-min)))))
+  (let [value   (double value)
+        in-min  (double in-min)
+        in-max  (double in-max)
+        out-min (double out-min)
+        out-max (double out-max)]
+    (+ out-min (* (- out-max out-min)
+                  (/ (- value in-min) (- in-max in-min))))))
 
 (defn apply-modulator
   "Apply modulator to a parameter in the params map"

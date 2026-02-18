@@ -63,14 +63,16 @@
 (defrecord RippleDistortion [frequency amplitude speed]
   Effect
   (process [this pixel-data params]
-    (let [time (:time params 0)]
-      (map (fn [pixel]
-             (let [x (:x pixel)
-                   y (:y pixel)
-                   dx (* amplitude (Math/sin (+ (* y frequency) (* time speed))))
-                   dy (* amplitude (Math/sin (+ (* x frequency) (* time speed 1.5))))]
-               (assoc pixel :x (+ x dx) :y (+ y dy))))
-           pixel-data))))
+    (if (zero? amplitude)
+      pixel-data
+      (let [time (:time params 0)]
+        (map (fn [pixel]
+               (let [x (:x pixel)
+                     y (:y pixel)
+                     dx (* amplitude (Math/sin (+ (* y frequency) (* time speed))))
+                     dy (* amplitude (Math/sin (+ (* x frequency) (* time speed 1.5))))]
+                 (assoc pixel :x (+ x dx) :y (+ y dy))))
+             pixel-data)))))
 
 ;; Echo / multi-layer effect
 (defrecord Echo [layers offset-x offset-y alpha-decay]
