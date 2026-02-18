@@ -5,4 +5,5 @@
   :main core
   :source-paths ["src"]
   :test-paths ["test"]
-  :profiles {:test {:jvm-opts ["-Djava.awt.headless=true"]}})
+  :profiles {:test {:jvm-opts ["-Djava.awt.headless=true"]
+                    :aot [core]}})
