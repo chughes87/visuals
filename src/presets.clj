@@ -110,4 +110,4 @@
   [preset-name width height]
   (if-let [patch-fn (get preset-patches preset-name)]
     (patch-fn width height)
-    (classic-mandelbrot-patch width height))) (defn preset-patches [arg1])
+    (classic-mandelbrot-patch width height)))
