@@ -21,10 +21,11 @@
   ;; Write directly to Processing's pixel buffer instead of individual
   ;; rect calls — eliminates ~5 API calls per pixel (push-style, no-stroke,
   ;; fill, rect, pop-style) and replaces them with a single array write.
-  (let [w (q/width)
-        h (q/height)]
-    (q/load-pixels)
-    (let [^ints px-buf (q/pixels)]
+  (let [w      (q/width)
+        h      (q/height)
+        applet (q/current-applet)]
+    (.loadPixels applet)
+    (let [^ints px-buf (.-pixels applet)]
       (doseq [pixel pixel-data]
         (when (and (:x pixel) (:y pixel))
           (let [px   (int (:x pixel))
@@ -66,7 +67,7 @@
                       (when (and (< -1 nx w) (< -1 ny h))
                         (aset px-buf (unchecked-add (unchecked-multiply ny w) nx)
                               argb))))))))))
-    (q/update-pixels)))
+    (.updatePixels applet)))
 
 (def ^:private spinner-frames ["⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏"])
 
