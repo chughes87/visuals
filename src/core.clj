@@ -30,6 +30,8 @@
         (q/rect (:x pixel) (:y pixel) size size))
       (q/pop-style))))
 
+(def ^:private spinner-frames ["⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏"])
+
 (defn draw-ui
   "Draw UI overlay with patch info"
   [state]
@@ -47,6 +49,19 @@
                  "Click=zoom | 1-5=presets | Space=next preset\n"
                  "+/-=iterations | R=reset | Q=quit")
             10 20))
+  ;; Render status indicator at bottom-left
+  (let [frame              (:frame state)
+        recomputed-at      (:recomputed-at-frame state -1)
+        frames-since       (- frame recomputed-at)
+        flash-duration     45   ; frames (~1.5 s) to show the refresh flash
+        spinning?          (< frames-since flash-duration)]
+    (if spinning?
+      (let [spinner (nth spinner-frames (mod frame (count spinner-frames)))]
+        (q/fill 255 220 80 230)
+        (q/text (str spinner " refreshed") 10 (- (q/height) 12)))
+      (do
+        (q/fill 100 220 100 180)
+        (q/text "● cached" 10 (- (q/height) 12)))))
   (q/pop-style))
 
 ;; Setup
@@ -76,6 +91,9 @@
         new-state (-> state
                       (assoc :patch (:patch result))
                       (assoc :pixel-data (:pixel-data result))
+                      (assoc :cache-hit? (:cache-hit? result))
+                      (update :recomputed-at-frame
+                              (fn [prev] (if (:cache-hit? result) prev (:frame state))))
                       (update :frame inc))]
     new-state))
 

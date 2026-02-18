@@ -38,8 +38,9 @@
         current-gen-params (select-keys modulated-params relevant-keys)
 
         ;; Use cached pixel data when generator-relevant params haven't changed
+        cache-hit?   (= current-gen-params (:last-gen-params patch))
         [pixel-data updated-patch]
-        (if (= current-gen-params (:last-gen-params patch))
+        (if cache-hit?
           [(:gen-cache patch) patch]
           (let [fresh (gen/generate (:generator patch) modulated-params)]
             [fresh (assoc patch :gen-cache fresh :last-gen-params current-gen-params)]))
@@ -52,7 +53,8 @@
 
     {:pixel-data processed-data
      :params     modulated-params
-     :patch      (assoc updated-patch :params modulated-params)}))
+     :patch      (assoc updated-patch :params modulated-params)
+     :cache-hit? cache-hit?}))
 
 (defn update-patch-params
   "Update patch parameters (for user interaction)"
