@@ -32,7 +32,7 @@
                                    (:modulators patch)))
 
         ;; Generate base signal
-        pixel-data (gen/generate modulated-params)
+        pixel-data (gen/generate (:generator patch) modulated-params)
 
         ;; Apply effect chain
         processed-data (reduce (fn [data effect]
