@@ -23,12 +23,11 @@
         modulated-params (if (empty? (:modulators patch))
                            (:params patch)
                            (reduce (fn [p modulator]
-                                   ;; Call modulate - if it returns a map, use it
-                                   ;; Otherwise keep the original params
-                                     (let [result (mod/modulate modulator p)]
-                                       (if (map? result)
-                                         result
-                                         p)))
+                                   ;; Only ModMatrix returns modified params
+                                   ;; All others are building blocks FOR ModMatrix
+                                     (if (instance? mod/ModMatrix modulator)
+                                       (mod/modulate modulator p)
+                                       p))  ;; Skip non-ModMatrix modulators
                                    (:params patch)
                                    (:modulators patch)))
 
