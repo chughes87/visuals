@@ -25,7 +25,7 @@
                            (reduce (fn [p modulator]
                                    ;; Only ModMatrix returns modified params
                                    ;; All others are building blocks FOR ModMatrix
-                                     (if (instance? mod/ModMatrix modulator)
+                                     (if (instance? modulators.ModMatrix modulator)
                                        (mod/modulate modulator p)
                                        p))  ;; Skip non-ModMatrix modulators
                                    (:params patch)
