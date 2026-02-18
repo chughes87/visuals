@@ -11,24 +11,62 @@
 (defn render-pixels
   "Render pixel data to screen"
   [pixel-data params]
-  ;; Apply motion blur if enabled
+  ;; Apply motion blur if enabled (single rect call, not per-pixel)
   (when-let [blur-alpha (:motion-blur-alpha params)]
     (q/push-style)
     (q/fill 0 0 0 (* 255 blur-alpha))
     (q/rect 0 0 (q/width) (q/height))
     (q/pop-style))
 
-  ;; Draw pixels
-  (doseq [pixel pixel-data]
-    (when (and (:x pixel) (:y pixel))
-      (q/push-style)
-      (q/no-stroke)
-      (if-let [alpha (:alpha pixel)]
-        (q/fill (:r pixel 255) (:g pixel 255) (:b pixel 255) alpha)
-        (q/fill (:r pixel 255) (:g pixel 255) (:b pixel 255)))
-      (let [size (:size pixel 2)]
-        (q/rect (:x pixel) (:y pixel) size size))
-      (q/pop-style))))
+  ;; Write directly to Processing's pixel buffer instead of individual
+  ;; rect calls — eliminates ~5 API calls per pixel (push-style, no-stroke,
+  ;; fill, rect, pop-style) and replaces them with a single array write.
+  (let [w (q/width)
+        h (q/height)]
+    (q/load-pixels)
+    (let [^ints px-buf (q/pixels)]
+      (doseq [pixel pixel-data]
+        (when (and (:x pixel) (:y pixel))
+          (let [px   (int (:x pixel))
+                py   (int (:y pixel))
+                r    (int (:r pixel 255))
+                g    (int (:g pixel 255))
+                b    (int (:b pixel 255))
+                size (int (:size pixel 2))]
+            (if-let [raw-alpha (:alpha pixel)]
+              ;; Translucent pixel: blend over whatever is already in the buffer
+              (let [a     (int raw-alpha)
+                    a-f   (/ a 255.0)
+                    a-inv (- 1.0 a-f)]
+                (dotimes [dy size]
+                  (dotimes [dx size]
+                    (let [nx (unchecked-add px dx)
+                          ny (unchecked-add py dy)]
+                      (when (and (< -1 nx w) (< -1 ny h))
+                        (let [idx (unchecked-add (unchecked-multiply ny w) nx)
+                              cur (aget px-buf idx)
+                              cr  (bit-and (bit-shift-right cur 16) 0xFF)
+                              cg  (bit-and (bit-shift-right cur 8)  0xFF)
+                              cb  (bit-and cur 0xFF)]
+                          (aset px-buf idx
+                                (unchecked-int
+                                  (bit-or 0xFF000000
+                                          (bit-shift-left (int (+ (* r a-f) (* cr a-inv))) 16)
+                                          (bit-shift-left (int (+ (* g a-f) (* cg a-inv))) 8)
+                                          (int (+ (* b a-f) (* cb a-inv))))))))))))
+              ;; Opaque pixel: write directly — fast path for the common case
+              (let [argb (unchecked-int (bit-or 0xFF000000
+                                                (bit-shift-left r 16)
+                                                (bit-shift-left g 8)
+                                                b))]
+                (dotimes [dy size]
+                  (dotimes [dx size]
+                    (let [nx (unchecked-add px dx)
+                          ny (unchecked-add py dy)]
+                      (when (and (< -1 nx w) (< -1 ny h))
+                        (aset px-buf (unchecked-add (unchecked-multiply ny w) nx)
+                              argb))))))))))
+    (q/update-pixels)))
 
 (def ^:private spinner-frames ["⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏"])
 
