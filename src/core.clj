@@ -53,7 +53,7 @@
                                   (bit-or 0xFF000000
                                           (bit-shift-left (int (+ (* r a-f) (* cr a-inv))) 16)
                                           (bit-shift-left (int (+ (* g a-f) (* cg a-inv))) 8)
-                                          (int (+ (* b a-f) (* cb a-inv))))))))))))
+                                          (int (+ (* b a-f) (* cb a-inv))))))))))))))
               ;; Opaque pixel: write directly — fast path for the common case
               (let [argb (unchecked-int (bit-or 0xFF000000
                                                 (bit-shift-left r 16)
