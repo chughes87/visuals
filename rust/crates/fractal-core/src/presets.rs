@@ -45,11 +45,13 @@ impl Preset {
             //    Clojure: mandelbrot + color-mapper(:classic) + no modulators
             // -----------------------------------------------------------------
             Preset::ClassicMandelbrot => {
-                let mut params = Params::default();
-                params.center_x = -0.5;
-                params.center_y = 0.0;
-                params.zoom = 1.0;
-                params.max_iter = 100;
+                let params = Params {
+                    center_x: -0.5,
+                    center_y: 0.0,
+                    zoom: 1.0,
+                    max_iter: 100,
+                    ..Default::default()
+                };
 
                 Patch::new(Box::new(MandelbrotGen), params)
                     .add_effect(Box::new(ColorMapEffect(ColorScheme::Classic)))
@@ -64,11 +66,13 @@ impl Preset {
             //    layer can read them into Uniforms::julia_c each frame.
             // -----------------------------------------------------------------
             Preset::PsychedelicJulia => {
-                let mut params = Params::default();
-                params.center_x = 0.0;
-                params.center_y = 0.0;
-                params.zoom = 1.0;
-                params.max_iter = 100;
+                let mut params = Params {
+                    center_x: 0.0,
+                    center_y: 0.0,
+                    zoom: 1.0,
+                    max_iter: 100,
+                    ..Default::default()
+                };
                 params.set("julia_cx", -0.7_f32);
                 params.set("julia_cy", 0.27015_f32);
                 params.set("hue_shift_amount", 0.0_f32);
@@ -99,11 +103,13 @@ impl Preset {
             //             LFO(0.3 Hz) → ripple_amplitude [5, 15].
             // -----------------------------------------------------------------
             Preset::TrippyMandelbrot => {
-                let mut params = Params::default();
-                params.center_x = -0.5;
-                params.center_y = 0.0;
-                params.zoom = 1.0;
-                params.max_iter = 100;
+                let mut params = Params {
+                    center_x: -0.5,
+                    center_y: 0.0,
+                    zoom: 1.0,
+                    max_iter: 100,
+                    ..Default::default()
+                };
                 params.set("ripple_amplitude", 10.0_f32);
 
                 Patch::new(Box::new(MandelbrotGen), params)
@@ -140,11 +146,13 @@ impl Preset {
             //    Clojure: burning-ship + fire color-map + motion-blur(0.15)
             // -----------------------------------------------------------------
             Preset::BurningShipTrails => {
-                let mut params = Params::default();
-                params.center_x = -0.5;
-                params.center_y = -0.5;
-                params.zoom = 1.0;
-                params.max_iter = 100;
+                let params = Params {
+                    center_x: -0.5,
+                    center_y: -0.5,
+                    zoom: 1.0,
+                    max_iter: 100,
+                    ..Default::default()
+                };
 
                 Patch::new(Box::new(BurningShipGen), params)
                     .add_effect(Box::new(ColorMapEffect(ColorScheme::Fire)))
