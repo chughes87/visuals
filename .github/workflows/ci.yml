@@ -37,3 +37,41 @@ jobs:
         env:
           JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
         run: lein test
+
+  rust-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry and build artefacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        working-directory: rust
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        working-directory: rust
+        run: cargo clippy -p fractal-core -p fractal-gpu -- -D warnings
+
+      - name: Test (fractal-core)
+        working-directory: rust
+        run: cargo test -p fractal-core
+
+      - name: Test (fractal-gpu — headless, no GPU required)
+        working-directory: rust
+        run: cargo test -p fractal-gpu
