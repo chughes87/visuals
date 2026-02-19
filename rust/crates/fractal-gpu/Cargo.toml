@@ -1,0 +1,11 @@
+[package]
+name = "fractal-gpu"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fractal-core = { path = "../fractal-core" }
+wgpu = "22"
+bytemuck = { version = "1", features = ["derive"] }
+glam = "0.28"
+log = "0.4"
