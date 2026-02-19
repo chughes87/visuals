@@ -71,9 +71,17 @@ impl ApplicationHandler for Handler {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        // Feed every event to egui first; game input is skipped when egui
+        // reports the event was consumed (e.g. a click inside the HUD panel).
+        let egui_consumed = if let Some(app) = &mut self.app {
+            app.egui_on_window_event(&event)
+        } else {
+            false
+        };
+
         match event {
             // ----------------------------------------------------------------
-            // Exit
+            // Exit — always handled regardless of egui
             // ----------------------------------------------------------------
             WindowEvent::CloseRequested => {
                 log::info!("Close requested — exiting");
@@ -81,7 +89,7 @@ impl ApplicationHandler for Handler {
             }
 
             // ----------------------------------------------------------------
-            // Keyboard
+            // Keyboard — skip if egui consumed the event
             // ----------------------------------------------------------------
             WindowEvent::KeyboardInput {
                 event:
@@ -91,7 +99,7 @@ impl ApplicationHandler for Handler {
                         ..
                     },
                 ..
-            } => {
+            } if !egui_consumed => {
                 if let Some(key) = winit_to_key(code) {
                     if let Some(app) = &mut self.app {
                         if let Some(action) = app.on_key_pressed(key) {
@@ -104,7 +112,7 @@ impl ApplicationHandler for Handler {
             }
 
             // ----------------------------------------------------------------
-            // Mouse — track cursor position
+            // Mouse — track cursor position (always; egui needs it too)
             // ----------------------------------------------------------------
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(app) = &mut self.app {
@@ -113,13 +121,13 @@ impl ApplicationHandler for Handler {
             }
 
             // ----------------------------------------------------------------
-            // Mouse — left click → zoom
+            // Mouse — left click → zoom (skip if egui consumed)
             // ----------------------------------------------------------------
             WindowEvent::MouseInput {
                 button: MouseButton::Left,
                 state: ElementState::Pressed,
                 ..
-            } => {
+            } if !egui_consumed => {
                 if let Some(app) = &mut self.app {
                     let action = app.on_mouse_left_click();
                     if app.handle_action(action) {
@@ -129,7 +137,7 @@ impl ApplicationHandler for Handler {
             }
 
             // ----------------------------------------------------------------
-            // Resize — reconfigure the wgpu surface
+            // Resize — always handled
             // ----------------------------------------------------------------
             WindowEvent::Resized(new_size) => {
                 if let Some(app) = &mut self.app {
@@ -138,13 +146,12 @@ impl ApplicationHandler for Handler {
             }
 
             // ----------------------------------------------------------------
-            // Redraw
+            // Redraw — always handled
             // ----------------------------------------------------------------
             WindowEvent::RedrawRequested => {
                 if let Some(app) = &mut self.app {
                     match app.render() {
                         Ok(()) => {}
-                        // Surface lost / outdated: reconfigure and try again next frame.
                         Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                             if let Some(window) = &self.window {
                                 let size = window.inner_size();
