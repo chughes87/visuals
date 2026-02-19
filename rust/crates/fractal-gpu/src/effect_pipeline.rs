@@ -209,6 +209,7 @@ impl EffectPass {
 
     /// Upload uniforms + per-effect params, record one compute pass into
     /// `encoder`, then call `pp.swap()` so the next pass reads the result.
+    #[allow(clippy::too_many_arguments)]
     pub fn dispatch(
         &self,
         device: &Device,
@@ -285,7 +286,7 @@ impl EffectPass {
             pass.set_pipeline(self.pipeline_for(kind));
             pass.set_bind_group(0, &bind_group, &[]);
             let wg = 8u32;
-            pass.dispatch_workgroups((width + wg - 1) / wg, (height + wg - 1) / wg, 1);
+            pass.dispatch_workgroups(width.div_ceil(wg), height.div_ceil(wg), 1);
         }
 
         pp.swap();

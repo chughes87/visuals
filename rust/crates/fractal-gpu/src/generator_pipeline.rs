@@ -149,7 +149,7 @@ impl GeneratorPass {
         pass.set_bind_group(0, &bind_group, &[]);
 
         let wg = 8u32;
-        pass.dispatch_workgroups((self.width + wg - 1) / wg, (self.height + wg - 1) / wg, 1);
+        pass.dispatch_workgroups(self.width.div_ceil(wg), self.height.div_ceil(wg), 1);
     }
 
     fn pipeline_for(&self, kind: GeneratorKind) -> &ComputePipeline {

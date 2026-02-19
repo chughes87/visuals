@@ -21,8 +21,8 @@ pub struct Params {
     pub mouse_y: f32,
 }
 
-impl Params {
-    pub fn default() -> Self {
+impl Default for Params {
+    fn default() -> Self {
         Self {
             fields: HashMap::new(),
             time: 0.0,
@@ -35,7 +35,9 @@ impl Params {
             mouse_y: 0.0,
         }
     }
+}
 
+impl Params {
     pub fn get(&self, key: &str) -> f32 {
         *self.fields.get(key).unwrap_or(&0.0)
     }
