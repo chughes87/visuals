@@ -16,8 +16,8 @@ pub enum Key {
     Digit4,
     Digit5,
     Space,
-    Equal,  // = / + (same physical key; Shift state ignored)
-    Minus,  // - / _ (same physical key; Shift state ignored)
+    Equal, // = / + (same physical key; Shift state ignored)
+    Minus, // - / _ (same physical key; Shift state ignored)
     R,
     Q,
     Escape,
@@ -38,7 +38,10 @@ pub enum InputAction {
     Quit,
     /// Zoom in 2× centred on a normalised screen position.
     /// `norm_x` and `norm_y` are in \[0, 1\] (0 = left/top, 1 = right/bottom).
-    MouseZoom { norm_x: f32, norm_y: f32 },
+    MouseZoom {
+        norm_x: f32,
+        norm_y: f32,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -169,10 +172,7 @@ mod tests {
 
     #[test]
     fn space_cycles_next_preset() {
-        assert_eq!(
-            input().on_key(Key::Space),
-            Some(InputAction::CycleNextPreset)
-        );
+        assert_eq!(input().on_key(Key::Space), Some(InputAction::CycleNextPreset));
     }
 
     #[test]
