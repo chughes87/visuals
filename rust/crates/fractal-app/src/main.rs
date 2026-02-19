@@ -8,30 +8,39 @@ use winit::{
     window::{Window, WindowId},
 };
 
+mod app;
 mod input;
 
+use app::App;
+
 // ---------------------------------------------------------------------------
-// App — winit ApplicationHandler (Phase 7: blank window only)
+// Handler — winit ApplicationHandler (Phase 8: black wgpu surface)
 // ---------------------------------------------------------------------------
 
-struct App {
+struct Handler {
     window: Option<Arc<Window>>,
+    app: Option<App>,
 }
 
-impl ApplicationHandler for App {
-    /// Called once on desktop (or on resume on mobile).
-    /// Creates the 800×600 window.
+impl ApplicationHandler for Handler {
+    /// Called once on desktop when the event loop starts.
+    /// Creates the window then initialises the wgpu surface.
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attrs = Window::default_attributes()
             .with_title("Fractal Explorer")
             .with_inner_size(winit::dpi::LogicalSize::new(800u32, 600u32));
 
-        let window = event_loop
-            .create_window(window_attrs)
-            .expect("failed to create window");
+        let window = Arc::new(
+            event_loop
+                .create_window(window_attrs)
+                .expect("failed to create window"),
+        );
 
         log::info!("Window created (800×600)");
-        self.window = Some(Arc::new(window));
+
+        let gpu_app = App::new(Arc::clone(&window));
+        self.window = Some(window);
+        self.app = Some(gpu_app);
     }
 
     fn window_event(
@@ -42,16 +51,13 @@ impl ApplicationHandler for App {
     ) {
         match event {
             // ----------------------------------------------------------------
-            // Exit on close button
+            // Exit
             // ----------------------------------------------------------------
             WindowEvent::CloseRequested => {
                 log::info!("Close requested — exiting");
                 event_loop.exit();
             }
 
-            // ----------------------------------------------------------------
-            // Exit on Q or Escape
-            // ----------------------------------------------------------------
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -69,16 +75,42 @@ impl ApplicationHandler for App {
             },
 
             // ----------------------------------------------------------------
-            // Redraw — Phase 7: blank window, nothing to paint yet
+            // Resize — reconfigure the wgpu surface
             // ----------------------------------------------------------------
-            WindowEvent::RedrawRequested => {}
+            WindowEvent::Resized(new_size) => {
+                if let Some(app) = &mut self.app {
+                    app.resize(new_size.width, new_size.height);
+                }
+            }
+
+            // ----------------------------------------------------------------
+            // Redraw — clear to black and present
+            // ----------------------------------------------------------------
+            WindowEvent::RedrawRequested => {
+                if let Some(app) = &mut self.app {
+                    match app.render() {
+                        Ok(()) => {}
+                        // Surface lost / outdated: reconfigure and try again next frame.
+                        Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                            if let Some(window) = &self.window {
+                                let size = window.inner_size();
+                                app.resize(size.width, size.height);
+                            }
+                        }
+                        Err(wgpu::SurfaceError::OutOfMemory) => {
+                            log::error!("GPU out of memory — exiting");
+                            event_loop.exit();
+                        }
+                        Err(e) => log::warn!("render error: {e:?}"),
+                    }
+                }
+            }
 
             _ => {}
         }
     }
 
-    /// Called when all pending events are processed.
-    /// Requesting redraw here drives the continuous render loop.
+    /// Drive continuous redraws (game-loop style).
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(window) = &self.window {
             window.request_redraw();
@@ -96,6 +128,9 @@ fn main() {
     let event_loop = EventLoop::new().expect("failed to create event loop");
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut app = App { window: None };
-    event_loop.run_app(&mut app).expect("event loop error");
+    let mut handler = Handler {
+        window: None,
+        app: None,
+    };
+    event_loop.run_app(&mut handler).expect("event loop error");
 }
