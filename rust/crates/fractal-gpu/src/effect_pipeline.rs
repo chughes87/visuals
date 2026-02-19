@@ -150,7 +150,7 @@ impl EffectPass {
                 label: Some(label),
                 layout: Some(layout),
                 module: &module,
-                entry_point: Some("main"),
+                entry_point: "main",
                 compilation_options: Default::default(),
                 cache: None,
             })
@@ -248,7 +248,7 @@ impl EffectPass {
 // Serialise EffectKind → 16-byte params buffer (matches each WGSL params struct)
 // ---------------------------------------------------------------------------
 
-fn effect_params_bytes(kind: &EffectKind) -> [u8; 16] {
+pub(crate) fn effect_params_bytes(kind: &EffectKind) -> [u8; 16] {
     let mut buf = [0u8; 16];
     match kind {
         EffectKind::ColorMap { scheme } => {
@@ -287,6 +287,155 @@ fn effect_params_bytes(kind: &EffectKind) -> [u8; 16] {
 // ---------------------------------------------------------------------------
 // BGL entry helpers
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fractal_core::{ColorScheme, EffectKind};
+
+    fn f32_at(buf: &[u8; 16], offset: usize) -> f32 {
+        f32::from_ne_bytes(buf[offset..offset + 4].try_into().unwrap())
+    }
+    fn u32_at(buf: &[u8; 16], offset: usize) -> u32 {
+        u32::from_ne_bytes(buf[offset..offset + 4].try_into().unwrap())
+    }
+
+    // --- effect_params_bytes --------------------------------------------------
+
+    #[test]
+    fn params_bytes_color_map_classic() {
+        let buf = effect_params_bytes(&EffectKind::ColorMap { scheme: ColorScheme::Classic });
+        assert_eq!(u32_at(&buf, 0), 0);
+    }
+
+    #[test]
+    fn params_bytes_color_map_fire() {
+        let buf = effect_params_bytes(&EffectKind::ColorMap { scheme: ColorScheme::Fire });
+        assert_eq!(u32_at(&buf, 0), 1);
+    }
+
+    #[test]
+    fn params_bytes_color_map_ocean() {
+        let buf = effect_params_bytes(&EffectKind::ColorMap { scheme: ColorScheme::Ocean });
+        assert_eq!(u32_at(&buf, 0), 2);
+    }
+
+    #[test]
+    fn params_bytes_color_map_psychedelic() {
+        let buf = effect_params_bytes(&EffectKind::ColorMap { scheme: ColorScheme::Psychedelic });
+        assert_eq!(u32_at(&buf, 0), 3);
+    }
+
+    #[test]
+    fn params_bytes_ripple() {
+        let buf = effect_params_bytes(&EffectKind::Ripple {
+            frequency: 0.5, amplitude: 3.0, speed: 2.0,
+        });
+        assert!((f32_at(&buf, 0) - 0.5).abs() < 1e-6);
+        assert!((f32_at(&buf, 4) - 3.0).abs() < 1e-6);
+        assert!((f32_at(&buf, 8) - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn params_bytes_echo() {
+        let buf = effect_params_bytes(&EffectKind::Echo {
+            layers: 4, offset: 1.5, decay: 0.7,
+        });
+        assert_eq!(u32_at(&buf, 0), 4);
+        assert!((f32_at(&buf, 4) - 1.5).abs() < 1e-6);
+        assert!((f32_at(&buf, 8) - 0.7).abs() < 1e-6);
+    }
+
+    #[test]
+    fn params_bytes_hue_shift() {
+        let buf = effect_params_bytes(&EffectKind::HueShift { amount: 1.047 });
+        assert!((f32_at(&buf, 0) - 1.047).abs() < 1e-5);
+        // padding bytes should be zero
+        assert_eq!(&buf[4..16], &[0u8; 12]);
+    }
+
+    #[test]
+    fn params_bytes_brightness_contrast() {
+        let buf = effect_params_bytes(&EffectKind::BrightnessContrast {
+            brightness: 0.2, contrast: 1.5,
+        });
+        assert!((f32_at(&buf, 0) - 0.2).abs() < 1e-6);
+        assert!((f32_at(&buf, 4) - 1.5).abs() < 1e-6);
+        assert_eq!(&buf[8..16], &[0u8; 8]);
+    }
+
+    #[test]
+    fn params_bytes_motion_blur() {
+        let buf = effect_params_bytes(&EffectKind::MotionBlur { opacity: 0.85 });
+        assert!((f32_at(&buf, 0) - 0.85).abs() < 1e-6);
+        assert_eq!(&buf[4..16], &[0u8; 12]);
+    }
+
+    #[test]
+    fn params_bytes_always_16_bytes() {
+        let kinds = [
+            EffectKind::ColorMap { scheme: ColorScheme::Classic },
+            EffectKind::Ripple { frequency: 1.0, amplitude: 1.0, speed: 1.0 },
+            EffectKind::Echo { layers: 1, offset: 0.0, decay: 0.5 },
+            EffectKind::HueShift { amount: 0.0 },
+            EffectKind::BrightnessContrast { brightness: 0.0, contrast: 1.0 },
+            EffectKind::MotionBlur { opacity: 1.0 },
+        ];
+        for kind in &kinds {
+            assert_eq!(effect_params_bytes(kind).len(), 16);
+        }
+    }
+
+    // --- Uniforms layout ------------------------------------------------------
+
+    #[test]
+    fn uniforms_size_is_48_bytes() {
+        // Uniforms must be 48 bytes to satisfy wgpu's min uniform buffer alignment
+        // and match the WGSL struct: 2+2+1+1+1+1 f32/u32 + 2+2 padding f32 = 12 × 4
+        assert_eq!(std::mem::size_of::<crate::context::Uniforms>(), 48);
+    }
+
+    // --- GPU smoke tests (require a GPU — skipped in CI) ----------------------
+
+    /// Verify EffectPass and PingPong can be constructed without panicking.
+    /// Run with:  cargo test -p fractal-gpu -- --ignored
+    #[test]
+    #[ignore = "requires GPU adapter"]
+    fn effect_pass_new_does_not_panic() {
+        pollster::block_on(async {
+            let ctx = crate::context::GpuContext::new_headless().await;
+            let _pass = EffectPass::new(&ctx.device);
+            let _pp   = PingPong::new(&ctx.device, 64, 64);
+        });
+    }
+
+    #[test]
+    #[ignore = "requires GPU adapter"]
+    fn ping_pong_swap_alternates_views() {
+        pollster::block_on(async {
+            let ctx = crate::context::GpuContext::new_headless().await;
+            let mut pp = PingPong::new(&ctx.device, 64, 64);
+
+            assert!(!pp.current);
+            let read_before  = pp.read_view()  as *const _;
+            let write_before = pp.write_view() as *const _;
+
+            pp.swap();
+
+            assert!(pp.current);
+            let read_after  = pp.read_view()  as *const _;
+            let write_after = pp.write_view() as *const _;
+
+            // After swap, what was the write target is now the read target
+            assert_eq!(read_after,  write_before);
+            assert_eq!(write_after, read_before);
+        });
+    }
+}
 
 fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {

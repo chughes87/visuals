@@ -92,7 +92,7 @@ impl GeneratorPass {
                 label: Some(label),
                 layout: Some(&pipeline_layout),
                 module: &module,
-                entry_point: Some("main"),
+                entry_point: "main",
                 compilation_options: Default::default(),
                 cache: None,
             })
