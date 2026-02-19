@@ -6,3 +6,7 @@ edition = "2021"
 [dependencies]
 fractal-core = { path = "../fractal-core" }
 fractal-gpu  = { path = "../fractal-gpu" }
+winit        = "0.30"
+pollster     = "0.3"
+log          = "0.4"
+env_logger   = "0.11"
