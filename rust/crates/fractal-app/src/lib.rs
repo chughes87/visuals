@@ -1,1 +1,2 @@
-// fractal-app: winit window + event loop (Phase 4)
+// fractal-app: winit window + event loop
+pub mod input;
