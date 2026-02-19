@@ -254,68 +254,85 @@ haven't changed (same caching logic as the Clojure implementation).
 15. Port all five presets from `presets.clj` to Rust in `fractal-core/src/presets.rs`.
 16. Confirm each preset renders identically (or better) to the Clojure version.
 
-### Phase 6 — Input & UI
-
-Split into three sub-phases to keep each step independently verifiable.
-
-#### Phase 6a — Input module (pure Rust, no GPU)
+### Phase 6 — Input module (pure Rust, no GPU)
 
 17. Create `fractal-app/src/input.rs`:
     - `InputAction` enum: `LoadPreset`, `CycleNextPreset`, `IterationsUp`,
       `IterationsDown`, `Reset`, `Quit`, `MouseZoom { norm_x, norm_y }`.
-    - `InputState` struct with `on_key(PhysicalKey) -> Option<InputAction>` and
-      `on_mouse_click(norm_x, norm_y) -> InputAction`.
+    - `InputState` struct with `on_key(PhysicalKey) -> Option<InputAction>`
+      and `on_mouse_click(norm_x, norm_y) -> InputAction`.
     - Key map: `1`–`5` → load preset, `Space` → cycle, `=`/`+` → iter up,
       `-` → iter down, `R` → reset, `Q`/`Escape` → quit.
-    - Unit tests (no GPU required): verify every key mapping, mouse zoom
-      coordinate math, and iteration clamping logic.
+    - Unit tests (no window needed): every key mapping, mouse zoom coordinate
+      math, iteration clamping (min 20, max 500).
+    - **Checkpoint:** `cargo test -p fractal-app` passes with no GPU.
 
-#### Phase 6b — Windowed app (wgpu surface + input wired up, no egui)
+### Phase 7 — Blank window (winit only)
 
-18. Update `fractal-app/Cargo.toml`: add `winit = "0.30"`, `wgpu = "22"`,
-    `pollster = "0.3"`, `log = "0.4"`, `env_logger = "0.11"`,
-    `bytemuck = "1"`.
-19. Create `fractal-app/src/app.rs`:
-    - `App` struct owning `wgpu::Surface`, `Device`, `Queue`,
-      `SurfaceConfiguration`, `GeneratorPass`, `EffectPass`, `PingPong`,
-      fullscreen-quad `RenderPipeline`, `Patch`, `InputState`, cursor
-      position, and FPS counter.
-    - `App::new(Arc<Window>) -> impl Future<Output = App>` — sets up the
-      wgpu surface-aware context (mirrors `GpuContext::new_headless` but
-      with a surface).
-    - `App::resize`, `App::render`, `App::handle_action`,
-      `App::on_key_pressed`, `App::on_cursor_moved`,
-      `App::on_mouse_left_click`.
-20. Update `fractal-app/src/main.rs`: winit 0.30 `ApplicationHandler` event
-    loop — `resumed` creates the window + App, `window_event` dispatches
-    resize / redraw / input, `about_to_wait` requests continuous redraw.
-21. Smoke-test: `cargo run -p fractal-app` opens an 800×600 window showing
-    preset 1; keys 1–5 switch presets, `+`/`-` change iteration depth,
-    mouse click zooms, `Q` quits.
+18. Add to `fractal-app/Cargo.toml`: `winit = "0.30"`, `pollster = "0.3"`,
+    `log = "0.4"`, `env_logger = "0.11"`.
+19. Update `fractal-app/src/main.rs`: winit 0.30 `ApplicationHandler` —
+    `resumed` creates an 800×600 window, `window_event` handles
+    `CloseRequested` and `Q`/`Escape` to exit, `about_to_wait` requests
+    continuous redraw.
+    - **Checkpoint:** `cargo run -p fractal-app` opens a blank OS window;
+      closing it or pressing Q exits cleanly.
 
-#### Phase 6c — egui HUD overlay
+### Phase 8 — wgpu surface (black screen)
 
-22. Add to `fractal-app/Cargo.toml`: `egui = "0.29"`, `egui-wgpu = "0.29"`,
+20. Add to `fractal-app/Cargo.toml`: `wgpu = "22"`, `bytemuck = "1"`.
+21. Create `fractal-app/src/app.rs` with a minimal `App`:
+    - `App::new(Arc<Window>)` — creates `Instance`, `Surface`, `Adapter`,
+      `Device`, `Queue`, `SurfaceConfiguration`.
+    - `App::render()` — `get_current_texture` → clear to black → `present`.
+    - `App::resize()` — reconfigures the surface.
+    - **Checkpoint:** black 800×600 window at vsync; no wgpu validation
+      errors in the console.
+
+### Phase 9 — Fractal rendered to window
+
+22. Extend `App` with `GeneratorPass`, `EffectPass`, `PingPong`, and a
+    fullscreen-quad `RenderPipeline` (reusing `FULLSCREEN_WGSL` from
+    `fractal-gpu`).
+23. Hardcode `Preset::ClassicMandelbrot`; `render()` dispatches the generator
+    compute pass, chains effects, then draws the fullscreen quad.
+    - **Checkpoint:** Mandelbrot appears in the window.
+
+### Phase 10 — Input wired up
+
+24. Add `Patch`, `InputState` (from Phase 6), cursor position, and FPS
+    counter to `App`.
+25. Wire `window_event` in `main.rs` to call `App::on_key_pressed`,
+    `App::on_cursor_moved`, and `App::on_mouse_left_click`; implement
+    `App::handle_action` to switch presets, adjust iterations, zoom, reset.
+    - **Checkpoint:** keys 1–5, Space, +/-, R, mouse-click zoom, and Q all
+      work correctly.
+
+### Phase 11 — egui HUD overlay
+
+26. Add to `fractal-app/Cargo.toml`: `egui = "0.29"`, `egui-wgpu = "0.29"`,
     `egui-winit = "0.29"`.
-23. Extend `App` with `egui::Context`, `egui_winit::State`,
+27. Extend `App` with `egui::Context`, `egui_winit::State`,
     `egui_wgpu::Renderer`.
-24. Each frame: run egui to produce a semi-transparent HUD panel (top-left)
-    showing preset name, zoom, iteration count, active effects, FPS, and
-    control hints; tessellate and render it in the same render pass after
-    the fullscreen quad.
-25. Feed `WindowEvent`s to `egui_winit::State::on_window_event` first;
-    skip game input if egui reports the event as consumed.
+28. Each frame: run egui to produce a semi-transparent top-left panel showing
+    preset name, zoom, iteration count, active effects, FPS, and control
+    hints; tessellate and render it after the fullscreen quad in the same
+    render pass.
+29. Feed `WindowEvent`s to egui first; skip game input if egui reports the
+    event consumed.
+    - **Checkpoint:** HUD panel visible over the fractal; clicking inside
+      the panel doesn't trigger a zoom.
 
-### Phase 7 — Polish & Performance
+### Phase 12 — Polish & Performance
 
-19. Benchmark: compare frame times between Clojure `pmap` and Rust GPU.
-20. Enable smooth iteration count (already in the shader above) for nicer
+30. Benchmark: compare frame times between Clojure `pmap` and Rust GPU.
+31. Enable smooth iteration count (already in the shader above) for nicer
     colour gradients at low iteration counts.
-21. Remove the stride=2 limitation — render at true 1-pixel resolution since
+32. Remove the stride=2 limitation — render at true 1-pixel resolution since
     GPU cost per pixel is negligible.
-22. Add `ParticleSystem` as a compute shader (particle positions in a storage
+33. Add `ParticleSystem` as a compute shader (particle positions in a storage
     buffer; one thread per particle).
-23. Profile with `wgpu`'s built-in timestamp queries; optimize hot shaders.
+34. Profile with `wgpu`'s built-in timestamp queries; optimize hot shaders.
 
 ---
 
