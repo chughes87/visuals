@@ -1,0 +1,10 @@
+[package]
+name = "fractal-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Lightweight, GPU-compatible math types
+glam = "0.28"
+# Perlin / value noise for NoiseGenerator
+fastnoise-lite = "1.1"
