@@ -1,25 +1,26 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use fractal_core::patch::Patch;
-use fractal_core::presets::Preset;
+use fractal_core::{patch::Patch, presets::Preset, EffectKind};
 use fractal_gpu::{
     context::Uniforms,
     effect_pipeline::{EffectPass, PingPong},
     generator_pipeline::GeneratorPass,
     renderer::FULLSCREEN_WGSL,
 };
+use winit::event::WindowEvent;
 use winit::window::Window;
 
 use crate::input::{apply_zoom, clamp_iterations, InputAction, InputState, Key};
 
 // ---------------------------------------------------------------------------
-// Simple FPS counter — logs to console once per second
+// FPS counter — tracks frame rate, exposes last known value for the HUD
 // ---------------------------------------------------------------------------
 
 struct FpsCounter {
     frames: u32,
     last_report: Instant,
+    last_fps: f32,
 }
 
 impl FpsCounter {
@@ -27,30 +28,53 @@ impl FpsCounter {
         Self {
             frames: 0,
             last_report: Instant::now(),
+            last_fps: 0.0,
         }
     }
 
-    /// Increment the frame count.  Returns the FPS value if a full second has
-    /// elapsed since the last report (so the caller can log it).
+    /// Tick one frame.  Updates the stored FPS once per second and returns
+    /// the new value so the caller can log it.
     fn tick(&mut self) -> Option<f32> {
         self.frames += 1;
         let elapsed = self.last_report.elapsed().as_secs_f32();
         if elapsed >= 1.0 {
-            let fps = self.frames as f32 / elapsed;
+            self.last_fps = self.frames as f32 / elapsed;
             self.frames = 0;
             self.last_report = Instant::now();
-            Some(fps)
+            Some(self.last_fps)
         } else {
             None
         }
     }
+
+    fn fps(&self) -> f32 {
+        self.last_fps
+    }
 }
 
 // ---------------------------------------------------------------------------
-// App — Phase 10: input wired up
+// Short display name for an EffectKind (used in the HUD)
+// ---------------------------------------------------------------------------
+
+fn effect_name(kind: &EffectKind) -> &'static str {
+    match kind {
+        EffectKind::ColorMap { .. } => "Color Map",
+        EffectKind::Ripple { .. } => "Ripple",
+        EffectKind::Echo { .. } => "Echo",
+        EffectKind::HueShift { .. } => "Hue Shift",
+        EffectKind::BrightnessContrast { .. } => "Brightness/Contrast",
+        EffectKind::MotionBlur { .. } => "Motion Blur",
+    }
+}
+
+// ---------------------------------------------------------------------------
+// App — Phase 11: egui HUD overlay
 // ---------------------------------------------------------------------------
 
 pub struct App {
+    // Kept for egui-winit (take/handle input, scale factor)
+    window: Arc<Window>,
+
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -78,11 +102,14 @@ pub struct App {
     // Frame timing
     last_frame: Instant,
     fps: FpsCounter,
+
+    // egui
+    egui_ctx: egui::Context,
+    egui_state: egui_winit::State,
+    egui_renderer: egui_wgpu::Renderer,
 }
 
 impl App {
-    /// Initialise wgpu for a given window.  The window is wrapped in `Arc` so
-    /// that the surface can safely hold a `'static` reference to it.
     pub fn new(window: Arc<Window>) -> Self {
         let size = window.inner_size();
         let width = size.width.max(1);
@@ -159,10 +186,23 @@ impl App {
         let (render_bgl, render_sampler, render_pipeline) =
             Self::build_render_pipeline(&device, format);
 
+        // ---- egui -----------------------------------------------------------
+        let egui_ctx = egui::Context::default();
+        let egui_state = egui_winit::State::new(
+            egui_ctx.clone(),
+            egui::ViewportId::ROOT,
+            &*window,
+            Some(window.scale_factor() as f32),
+            None, // theme: use OS default
+            Some(device.limits().max_texture_dimension_2d as usize),
+        );
+        let egui_renderer = egui_wgpu::Renderer::new(&device, format, None, 1, false);
+
         // ---- Patch (start with ClassicMandelbrot) ---------------------------
         let patch = Preset::ClassicMandelbrot.build();
 
         Self {
+            window,
             surface,
             device,
             queue,
@@ -179,6 +219,9 @@ impl App {
             cursor_pos: (0.0, 0.0),
             last_frame: Instant::now(),
             fps: FpsCounter::new(),
+            egui_ctx,
+            egui_state,
+            egui_renderer,
         }
     }
 
@@ -268,7 +311,6 @@ impl App {
     // Resize
     // -------------------------------------------------------------------------
 
-    /// Reconfigure the surface and rebuild size-dependent GPU resources.
     pub fn resize(&mut self, new_width: u32, new_height: u32) {
         if new_width == 0 || new_height == 0 {
             return;
@@ -277,7 +319,6 @@ impl App {
         self.surface_config.height = new_height;
         self.surface.configure(&self.device, &self.surface_config);
 
-        // Generator output and ping-pong textures are tied to the resolution.
         self.gen_pass = GeneratorPass::new(&self.device, new_width, new_height);
         self.pp = PingPong::new(&self.device, new_width, new_height);
 
@@ -285,25 +326,33 @@ impl App {
     }
 
     // -------------------------------------------------------------------------
-    // Input — called by main.rs window_event handler
+    // egui event forwarding
     // -------------------------------------------------------------------------
 
-    /// Translate a key press and return the resulting action, if any.
+    /// Forward a `WindowEvent` to egui.  Returns `true` if egui consumed it
+    /// (the caller should then skip game-input handling for that event).
+    pub fn egui_on_window_event(&mut self, event: &WindowEvent) -> bool {
+        self.egui_state
+            .on_window_event(&self.window, event)
+            .consumed
+    }
+
+    // -------------------------------------------------------------------------
+    // Game input — called by main.rs after egui has had first look
+    // -------------------------------------------------------------------------
+
     pub fn on_key_pressed(&self, key: Key) -> Option<InputAction> {
         self.input.on_key(key)
     }
 
-    /// Track the cursor position in physical pixels and update patch mouse params.
     pub fn on_cursor_moved(&mut self, x: f64, y: f64) {
         self.cursor_pos = (x, y);
-        // Normalise to [0, 1] for the MouseModulator
         let w = self.surface_config.width as f64;
         let h = self.surface_config.height as f64;
         self.patch.params.mouse_x = (x / w) as f32;
         self.patch.params.mouse_y = (y / h) as f32;
     }
 
-    /// Produce a MouseZoom action from the last known cursor position.
     pub fn on_mouse_left_click(&self) -> InputAction {
         let w = self.surface_config.width as f64;
         let h = self.surface_config.height as f64;
@@ -312,9 +361,7 @@ impl App {
         self.input.on_mouse_click(norm_x, norm_y)
     }
 
-    /// Apply an action to the app state.
-    ///
-    /// Returns `true` if the app should exit (i.e. action was `Quit`).
+    /// Returns `true` if the app should exit.
     pub fn handle_action(&mut self, action: InputAction) -> bool {
         match action {
             InputAction::LoadPreset(preset) => {
@@ -377,7 +424,6 @@ impl App {
     // Render
     // -------------------------------------------------------------------------
 
-    /// Run one full frame: tick the patch, dispatch generator + effects, draw.
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         // --- Timing ----------------------------------------------------------
         let now = Instant::now();
@@ -398,7 +444,7 @@ impl App {
         let width = self.surface_config.width;
         let height = self.surface_config.height;
 
-        // --- Build uniforms from patch params --------------------------------
+        // --- Build uniforms --------------------------------------------------
         let params = &self.patch.params;
         let uniforms = Uniforms {
             resolution: [width as f32, height as f32],
@@ -411,9 +457,52 @@ impl App {
             _pad2: [0.0, 0.0],
         };
 
-        // Snapshot kinds before GPU calls (avoids borrowing self.patch during dispatch).
         let gen_kind = self.patch.generator.kind();
         let effect_kinds: Vec<_> = self.patch.effects.iter().map(|e| e.kind(params)).collect();
+
+        // --- egui frame (CPU side — must happen before GPU encoding) ---------
+        // Collect HUD values before calling egui to avoid borrowing self inside
+        // the closure.
+        let preset_name = Preset::ALL[self.current_preset_idx].name();
+        let zoom = self.patch.params.zoom;
+        let max_iter = self.patch.params.max_iter;
+        let fps_display = self.fps.fps();
+        let effect_labels: Vec<&'static str> = effect_kinds.iter().map(effect_name).collect();
+
+        let raw_input = self.egui_state.take_egui_input(&self.window);
+        let full_output = self.egui_ctx.run(raw_input, |ctx| {
+            egui::Window::new("Fractal Explorer")
+                .anchor(egui::Align2::LEFT_TOP, [10.0, 10.0])
+                .collapsible(false)
+                .resizable(false)
+                .frame(
+                    egui::Frame::window(&ctx.style())
+                        .fill(egui::Color32::from_rgba_unmultiplied(0, 0, 0, 200)),
+                )
+                .show(ctx, |ui| {
+                    ui.label(format!("Preset:  {preset_name}"));
+                    ui.label(format!("Zoom:    {zoom:.2}×"));
+                    ui.label(format!("Iter:    {max_iter}"));
+                    let fx = if effect_labels.is_empty() {
+                        "none".to_string()
+                    } else {
+                        effect_labels.join(", ")
+                    };
+                    ui.label(format!("Effects: {fx}"));
+                    ui.label(format!("FPS:     {fps_display:.1}"));
+                    ui.separator();
+                    ui.label("1–5  load preset   Space  cycle");
+                    ui.label("+/-  iterations    R  reset");
+                    ui.label("Click  zoom        Q/Esc  quit");
+                });
+        });
+        self.egui_state
+            .handle_platform_output(&self.window, full_output.platform_output);
+
+        let primitives = self
+            .egui_ctx
+            .tessellate(full_output.shapes, full_output.pixels_per_point);
+        let textures_delta = full_output.textures_delta;
 
         // --- Acquire surface texture -----------------------------------------
         let output = self.surface.get_current_texture()?;
@@ -444,10 +533,7 @@ impl App {
             height,
         );
 
-        // --- 3. Fullscreen quad render pass ----------------------------------
-        // Determine which texture holds the final image:
-        //   * empty chain  → generator output
-        //   * N effects    → ping-pong read target (last swap put result there)
+        // --- 3. Fullscreen quad render pass (Clear → fractal) ----------------
         let final_view: &wgpu::TextureView = if effect_kinds.is_empty() {
             &self.gen_pass.output_view
         } else {
@@ -486,10 +572,63 @@ impl App {
             });
             rpass.set_pipeline(&self.render_pipeline);
             rpass.set_bind_group(0, &render_bg, &[]);
-            rpass.draw(0..6, 0..1); // two triangles, no vertex buffer
+            rpass.draw(0..6, 0..1);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        // --- 4. egui render pass (Load → draw HUD on top) --------------------
+        let screen_descriptor = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [width, height],
+            pixels_per_point: self.window.scale_factor() as f32,
+        };
+
+        // Upload any new/changed font/image textures required by egui
+        for (id, image_delta) in &textures_delta.set {
+            self.egui_renderer
+                .update_texture(&self.device, &self.queue, *id, image_delta);
+        }
+
+        // update_buffers uploads vertex/index data and returns any extra
+        // CommandBuffers produced by paint callbacks (typically empty).
+        let user_cmds = self.egui_renderer.update_buffers(
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &primitives,
+            &screen_descriptor,
+        );
+
+        {
+            // egui-wgpu 0.29 requires RenderPass<'static>; forget_lifetime()
+            // erases the borrow so we can pass it in.  The pass is dropped
+            // before encoder.finish() is called, so the GPU contract holds.
+            let mut egui_pass = encoder
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("egui-pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &surface_view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load, // composite on top of fractal
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                })
+                .forget_lifetime();
+            self.egui_renderer
+                .render(&mut egui_pass, &primitives, &screen_descriptor);
+        }
+
+        // Free GPU resources for any textures egui no longer needs
+        for id in &textures_delta.free {
+            self.egui_renderer.free_texture(id);
+        }
+
+        // Submit paint-callback buffers first, then the main frame encoder
+        self.queue
+            .submit(user_cmds.into_iter().chain([encoder.finish()]));
         output.present();
         Ok(())
     }
