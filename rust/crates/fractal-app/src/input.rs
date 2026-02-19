@@ -172,15 +172,15 @@ mod tests {
 
     #[test]
     fn space_cycles_next_preset() {
-        assert_eq!(input().on_key(Key::Space), Some(InputAction::CycleNextPreset));
+        assert_eq!(
+            input().on_key(Key::Space),
+            Some(InputAction::CycleNextPreset)
+        );
     }
 
     #[test]
     fn equal_increases_iterations() {
-        assert_eq!(
-            input().on_key(Key::Equal),
-            Some(InputAction::IterationsUp)
-        );
+        assert_eq!(input().on_key(Key::Equal), Some(InputAction::IterationsUp));
     }
 
     #[test]
