@@ -92,7 +92,7 @@ mod tests {
 
     struct StubEffect;
     impl Effect for StubEffect {
-        fn kind(&self) -> EffectKind {
+        fn kind(&self, _: &Params) -> EffectKind {
             EffectKind::HueShift { amount: 0.0 }
         }
     }
