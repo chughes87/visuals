@@ -82,18 +82,29 @@ mod tests {
         keys: &'static [&'static str],
     }
     impl Generator for StubGen {
-        fn kind(&self) -> GeneratorKind { GeneratorKind::Mandelbrot }
-        fn gen_param_keys(&self) -> &[&'static str] { self.keys }
+        fn kind(&self) -> GeneratorKind {
+            GeneratorKind::Mandelbrot
+        }
+        fn gen_param_keys(&self) -> &[&'static str] {
+            self.keys
+        }
     }
 
     struct StubEffect;
     impl Effect for StubEffect {
-        fn kind(&self) -> EffectKind { EffectKind::HueShift { amount: 0.0 } }
+        fn kind(&self) -> EffectKind {
+            EffectKind::HueShift { amount: 0.0 }
+        }
     }
 
-    struct StubMod { key: &'static str, value: f32 }
+    struct StubMod {
+        key: &'static str,
+        value: f32,
+    }
     impl Modulator for StubMod {
-        fn modulate(&self, params: &mut Params) { params.set(self.key, self.value); }
+        fn modulate(&self, params: &mut Params) {
+            params.set(self.key, self.value);
+        }
     }
 
     fn make_patch() -> Patch {
@@ -122,8 +133,10 @@ mod tests {
 
     #[test]
     fn tick_runs_modulators() {
-        let mut patch = make_patch()
-            .add_modulator(Box::new(StubMod { key: "val", value: 99.0 }));
+        let mut patch = make_patch().add_modulator(Box::new(StubMod {
+            key: "val",
+            value: 99.0,
+        }));
         patch.tick(0.016);
         assert_eq!(patch.params.get("val"), 99.0);
     }
@@ -181,7 +194,9 @@ mod tests {
     #[test]
     fn generator_dirty_tracks_custom_gen_key() {
         let mut patch = Patch::new(
-            Box::new(StubGen { keys: &["julia_cx"] }),
+            Box::new(StubGen {
+                keys: &["julia_cx"],
+            }),
             Params::default(),
         );
         patch.generator_dirty();
@@ -202,8 +217,14 @@ mod tests {
     #[test]
     fn add_modulator_appends() {
         let patch = make_patch()
-            .add_modulator(Box::new(StubMod { key: "a", value: 0.0 }))
-            .add_modulator(Box::new(StubMod { key: "b", value: 0.0 }));
+            .add_modulator(Box::new(StubMod {
+                key: "a",
+                value: 0.0,
+            }))
+            .add_modulator(Box::new(StubMod {
+                key: "b",
+                value: 0.0,
+            }));
         assert_eq!(patch.modulators.len(), 2);
     }
 }

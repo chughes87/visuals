@@ -26,8 +26,16 @@ impl Modulator for Lfo {
         let phase = params.time * self.frequency * TAU;
         let raw = match self.waveform {
             Waveform::Sine => phase.sin(),
-            Waveform::Triangle => 2.0 * (phase / TAU - (phase / TAU + 0.5).floor()).abs() * 2.0 - 1.0,
-            Waveform::Square => if phase.sin() >= 0.0 { 1.0 } else { -1.0 },
+            Waveform::Triangle => {
+                2.0 * (phase / TAU - (phase / TAU + 0.5).floor()).abs() * 2.0 - 1.0
+            }
+            Waveform::Square => {
+                if phase.sin() >= 0.0 {
+                    1.0
+                } else {
+                    -1.0
+                }
+            }
             Waveform::Saw => 2.0 * (phase / TAU - (phase / TAU).floor()) - 1.0,
         };
         params.set(self.target, self.offset + raw * self.amplitude);
@@ -120,7 +128,13 @@ mod tests {
     #[test]
     fn lfo_sine_at_zero_time() {
         // sin(0) = 0  →  output = offset + 0 * amplitude = offset
-        let lfo = Lfo { target: "v", waveform: Waveform::Sine, frequency: 1.0, amplitude: 2.0, offset: 5.0 };
+        let lfo = Lfo {
+            target: "v",
+            waveform: Waveform::Sine,
+            frequency: 1.0,
+            amplitude: 2.0,
+            offset: 5.0,
+        };
         let mut p = params_at(0.0);
         lfo.modulate(&mut p);
         assert!((p.get("v") - 5.0).abs() < 1e-5, "got {}", p.get("v"));
@@ -129,7 +143,13 @@ mod tests {
     #[test]
     fn lfo_sine_at_quarter_period() {
         // time = 0.25 s, freq = 1 Hz  →  phase = TAU*0.25 = π/2  →  sin = 1
-        let lfo = Lfo { target: "v", waveform: Waveform::Sine, frequency: 1.0, amplitude: 1.0, offset: 0.0 };
+        let lfo = Lfo {
+            target: "v",
+            waveform: Waveform::Sine,
+            frequency: 1.0,
+            amplitude: 1.0,
+            offset: 0.0,
+        };
         let mut p = params_at(0.25);
         lfo.modulate(&mut p);
         assert!((p.get("v") - 1.0).abs() < 1e-5, "got {}", p.get("v"));
@@ -138,7 +158,13 @@ mod tests {
     #[test]
     fn lfo_sine_at_three_quarter_period() {
         // phase = TAU*0.75  →  sin ≈ -1
-        let lfo = Lfo { target: "v", waveform: Waveform::Sine, frequency: 1.0, amplitude: 1.0, offset: 0.0 };
+        let lfo = Lfo {
+            target: "v",
+            waveform: Waveform::Sine,
+            frequency: 1.0,
+            amplitude: 1.0,
+            offset: 0.0,
+        };
         let mut p = params_at(0.75);
         lfo.modulate(&mut p);
         assert!((p.get("v") - (-1.0)).abs() < 1e-5, "got {}", p.get("v"));
@@ -147,7 +173,13 @@ mod tests {
     #[test]
     fn lfo_sine_amplitude_and_offset() {
         // At quarter period: output = offset + amplitude * 1.0
-        let lfo = Lfo { target: "v", waveform: Waveform::Sine, frequency: 1.0, amplitude: 3.0, offset: 10.0 };
+        let lfo = Lfo {
+            target: "v",
+            waveform: Waveform::Sine,
+            frequency: 1.0,
+            amplitude: 3.0,
+            offset: 10.0,
+        };
         let mut p = params_at(0.25);
         lfo.modulate(&mut p);
         assert!((p.get("v") - 13.0).abs() < 1e-4, "got {}", p.get("v"));
@@ -158,7 +190,13 @@ mod tests {
     #[test]
     fn lfo_square_positive_half() {
         // sin(TAU*0.1) > 0  →  raw = +1
-        let lfo = Lfo { target: "v", waveform: Waveform::Square, frequency: 1.0, amplitude: 1.0, offset: 0.0 };
+        let lfo = Lfo {
+            target: "v",
+            waveform: Waveform::Square,
+            frequency: 1.0,
+            amplitude: 1.0,
+            offset: 0.0,
+        };
         let mut p = params_at(0.1);
         lfo.modulate(&mut p);
         assert!((p.get("v") - 1.0).abs() < 1e-5);
@@ -167,7 +205,13 @@ mod tests {
     #[test]
     fn lfo_square_negative_half() {
         // sin(TAU*0.75) < 0  →  raw = -1
-        let lfo = Lfo { target: "v", waveform: Waveform::Square, frequency: 1.0, amplitude: 1.0, offset: 0.0 };
+        let lfo = Lfo {
+            target: "v",
+            waveform: Waveform::Square,
+            frequency: 1.0,
+            amplitude: 1.0,
+            offset: 0.0,
+        };
         let mut p = params_at(0.75);
         lfo.modulate(&mut p);
         assert!((p.get("v") - (-1.0)).abs() < 1e-5);
@@ -178,7 +222,13 @@ mod tests {
     #[test]
     fn lfo_saw_at_half_period() {
         // phase/TAU = 0.5  →  2*(0.5 - 0) - 1 = 0.0
-        let lfo = Lfo { target: "v", waveform: Waveform::Saw, frequency: 1.0, amplitude: 1.0, offset: 0.0 };
+        let lfo = Lfo {
+            target: "v",
+            waveform: Waveform::Saw,
+            frequency: 1.0,
+            amplitude: 1.0,
+            offset: 0.0,
+        };
         let mut p = params_at(0.5);
         lfo.modulate(&mut p);
         assert!((p.get("v")).abs() < 1e-5, "got {}", p.get("v"));
@@ -189,7 +239,13 @@ mod tests {
     #[test]
     fn lfo_triangle_at_half_period() {
         // phase/TAU = 0.5 → (0.5 + 0.5).floor() = 1 → |0.5-1| = 0.5 → 2*0.5*2-1 = 1.0
-        let lfo = Lfo { target: "v", waveform: Waveform::Triangle, frequency: 1.0, amplitude: 1.0, offset: 0.0 };
+        let lfo = Lfo {
+            target: "v",
+            waveform: Waveform::Triangle,
+            frequency: 1.0,
+            amplitude: 1.0,
+            offset: 0.0,
+        };
         let mut p = params_at(0.5);
         lfo.modulate(&mut p);
         assert!((p.get("v") - 1.0).abs() < 1e-5, "got {}", p.get("v"));
@@ -199,7 +255,10 @@ mod tests {
 
     #[test]
     fn mouse_modulator_maps_x() {
-        let mm = MouseModulator { target_x: Some("mx"), target_y: None };
+        let mm = MouseModulator {
+            target_x: Some("mx"),
+            target_y: None,
+        };
         let mut p = Params::default();
         p.mouse_x = 1.0; // → 1.0*2 - 1 = 1.0
         mm.modulate(&mut p);
@@ -208,7 +267,10 @@ mod tests {
 
     #[test]
     fn mouse_modulator_maps_y() {
-        let mm = MouseModulator { target_x: None, target_y: Some("my") };
+        let mm = MouseModulator {
+            target_x: None,
+            target_y: Some("my"),
+        };
         let mut p = Params::default();
         p.mouse_y = 0.5; // → 0.5*2 - 1 = 0.0
         mm.modulate(&mut p);
@@ -217,7 +279,10 @@ mod tests {
 
     #[test]
     fn mouse_modulator_skips_none_targets() {
-        let mm = MouseModulator { target_x: None, target_y: None };
+        let mm = MouseModulator {
+            target_x: None,
+            target_y: None,
+        };
         let mut p = Params::default();
         mm.modulate(&mut p);
         assert_eq!(p.get("mx"), 0.0);
@@ -227,7 +292,10 @@ mod tests {
 
     #[test]
     fn random_walk_sets_target() {
-        let rw = RandomWalk { target: "drift", speed: 1.0 };
+        let rw = RandomWalk {
+            target: "drift",
+            speed: 1.0,
+        };
         let mut p = Params::default();
         p.time = 1.0;
         rw.modulate(&mut p);
@@ -288,12 +356,28 @@ mod tests {
         let matrix = ModMatrix {
             routes: vec![
                 Route {
-                    modulator: Box::new(Lfo { target: "a", waveform: Waveform::Sine, frequency: 1.0, amplitude: 1.0, offset: 0.0 }),
-                    target: "a", min: 0.0, max: 1.0,
+                    modulator: Box::new(Lfo {
+                        target: "a",
+                        waveform: Waveform::Sine,
+                        frequency: 1.0,
+                        amplitude: 1.0,
+                        offset: 0.0,
+                    }),
+                    target: "a",
+                    min: 0.0,
+                    max: 1.0,
                 },
                 Route {
-                    modulator: Box::new(Lfo { target: "b", waveform: Waveform::Sine, frequency: 1.0, amplitude: 1.0, offset: 0.0 }),
-                    target: "b", min: 5.0, max: 10.0,
+                    modulator: Box::new(Lfo {
+                        target: "b",
+                        waveform: Waveform::Sine,
+                        frequency: 1.0,
+                        amplitude: 1.0,
+                        offset: 0.0,
+                    }),
+                    target: "b",
+                    min: 5.0,
+                    max: 10.0,
                 },
             ],
         };

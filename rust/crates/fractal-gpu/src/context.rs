@@ -34,7 +34,11 @@ impl GpuContext {
             .await
             .expect("Failed to create GPU device");
 
-        Self { instance, device, queue }
+        Self {
+            instance,
+            device,
+            queue,
+        }
     }
 }
 

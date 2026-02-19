@@ -20,10 +20,10 @@ impl Preset {
     pub fn name(self) -> &'static str {
         match self {
             Preset::ClassicMandelbrot => "Classic Mandelbrot",
-            Preset::PsychedelicJulia  => "Psychedelic Julia",
-            Preset::TrippyMandelbrot  => "Trippy Mandelbrot",
+            Preset::PsychedelicJulia => "Psychedelic Julia",
+            Preset::TrippyMandelbrot => "Trippy Mandelbrot",
             Preset::BurningShipTrails => "Burning Ship Trails",
-            Preset::NoiseField        => "Noise Field",
+            Preset::NoiseField => "Noise Field",
         }
     }
 }
@@ -62,9 +62,9 @@ mod tests {
     #[test]
     fn preset_names_match_expected() {
         assert_eq!(Preset::ClassicMandelbrot.name(), "Classic Mandelbrot");
-        assert_eq!(Preset::PsychedelicJulia.name(),  "Psychedelic Julia");
-        assert_eq!(Preset::TrippyMandelbrot.name(),  "Trippy Mandelbrot");
+        assert_eq!(Preset::PsychedelicJulia.name(), "Psychedelic Julia");
+        assert_eq!(Preset::TrippyMandelbrot.name(), "Trippy Mandelbrot");
         assert_eq!(Preset::BurningShipTrails.name(), "Burning Ship Trails");
-        assert_eq!(Preset::NoiseField.name(),        "Noise Field");
+        assert_eq!(Preset::NoiseField.name(), "Noise Field");
     }
 }

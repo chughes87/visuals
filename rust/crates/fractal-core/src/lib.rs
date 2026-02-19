@@ -61,12 +61,29 @@ pub enum GeneratorKind {
 /// Describes which effect to apply and its configuration.
 #[derive(Debug, Clone)]
 pub enum EffectKind {
-    ColorMap { scheme: ColorScheme },
-    Ripple { frequency: f32, amplitude: f32, speed: f32 },
-    Echo { layers: u32, offset: f32, decay: f32 },
-    HueShift { amount: f32 },
-    BrightnessContrast { brightness: f32, contrast: f32 },
-    MotionBlur { opacity: f32 },
+    ColorMap {
+        scheme: ColorScheme,
+    },
+    Ripple {
+        frequency: f32,
+        amplitude: f32,
+        speed: f32,
+    },
+    Echo {
+        layers: u32,
+        offset: f32,
+        decay: f32,
+    },
+    HueShift {
+        amount: f32,
+    },
+    BrightnessContrast {
+        brightness: f32,
+        contrast: f32,
+    },
+    MotionBlur {
+        opacity: f32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -140,9 +157,9 @@ mod tests {
 
     #[test]
     fn generator_kind_eq() {
-        assert_eq!(GeneratorKind::Mandelbrot,  GeneratorKind::Mandelbrot);
-        assert_ne!(GeneratorKind::Julia,       GeneratorKind::BurningShip);
-        assert_ne!(GeneratorKind::NoiseField,  GeneratorKind::Mandelbrot);
+        assert_eq!(GeneratorKind::Mandelbrot, GeneratorKind::Mandelbrot);
+        assert_ne!(GeneratorKind::Julia, GeneratorKind::BurningShip);
+        assert_ne!(GeneratorKind::NoiseField, GeneratorKind::Mandelbrot);
     }
 
     // --- EffectKind ------------------------------------------------------------
@@ -152,14 +169,27 @@ mod tests {
         let e = EffectKind::HueShift { amount: 1.5 };
         assert!(matches!(e, EffectKind::HueShift { .. }));
 
-        let e2 = EffectKind::Ripple { frequency: 0.1, amplitude: 5.0, speed: 1.0 };
+        let e2 = EffectKind::Ripple {
+            frequency: 0.1,
+            amplitude: 5.0,
+            speed: 1.0,
+        };
         assert!(matches!(e2, EffectKind::Ripple { .. }));
     }
 
     #[test]
     fn effect_kind_echo_fields() {
-        let e = EffectKind::Echo { layers: 3, offset: 0.5, decay: 0.8 };
-        if let EffectKind::Echo { layers, offset, decay } = e {
+        let e = EffectKind::Echo {
+            layers: 3,
+            offset: 0.5,
+            decay: 0.8,
+        };
+        if let EffectKind::Echo {
+            layers,
+            offset,
+            decay,
+        } = e
+        {
             assert_eq!(layers, 3);
             assert!((offset - 0.5).abs() < 1e-6);
             assert!((decay - 0.8).abs() < 1e-6);
@@ -172,8 +202,8 @@ mod tests {
 
     #[test]
     fn color_scheme_eq() {
-        assert_eq!(ColorScheme::Classic,     ColorScheme::Classic);
-        assert_ne!(ColorScheme::Fire,        ColorScheme::Ocean);
+        assert_eq!(ColorScheme::Classic, ColorScheme::Classic);
+        assert_ne!(ColorScheme::Fire, ColorScheme::Ocean);
         assert_ne!(ColorScheme::Psychedelic, ColorScheme::Classic);
     }
 }
