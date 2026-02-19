@@ -256,8 +256,55 @@ haven't changed (same caching logic as the Clojure implementation).
 
 ### Phase 6 — Input & UI
 
-17. Port `input.rs`: keyboard (1-5, Space, +/-, R, Q) and mouse click zoom.
-18. Add egui overlay for the HUD (preset name, zoom, iteration count, FPS).
+Split into three sub-phases to keep each step independently verifiable.
+
+#### Phase 6a — Input module (pure Rust, no GPU)
+
+17. Create `fractal-app/src/input.rs`:
+    - `InputAction` enum: `LoadPreset`, `CycleNextPreset`, `IterationsUp`,
+      `IterationsDown`, `Reset`, `Quit`, `MouseZoom { norm_x, norm_y }`.
+    - `InputState` struct with `on_key(PhysicalKey) -> Option<InputAction>` and
+      `on_mouse_click(norm_x, norm_y) -> InputAction`.
+    - Key map: `1`–`5` → load preset, `Space` → cycle, `=`/`+` → iter up,
+      `-` → iter down, `R` → reset, `Q`/`Escape` → quit.
+    - Unit tests (no GPU required): verify every key mapping, mouse zoom
+      coordinate math, and iteration clamping logic.
+
+#### Phase 6b — Windowed app (wgpu surface + input wired up, no egui)
+
+18. Update `fractal-app/Cargo.toml`: add `winit = "0.30"`, `wgpu = "22"`,
+    `pollster = "0.3"`, `log = "0.4"`, `env_logger = "0.11"`,
+    `bytemuck = "1"`.
+19. Create `fractal-app/src/app.rs`:
+    - `App` struct owning `wgpu::Surface`, `Device`, `Queue`,
+      `SurfaceConfiguration`, `GeneratorPass`, `EffectPass`, `PingPong`,
+      fullscreen-quad `RenderPipeline`, `Patch`, `InputState`, cursor
+      position, and FPS counter.
+    - `App::new(Arc<Window>) -> impl Future<Output = App>` — sets up the
+      wgpu surface-aware context (mirrors `GpuContext::new_headless` but
+      with a surface).
+    - `App::resize`, `App::render`, `App::handle_action`,
+      `App::on_key_pressed`, `App::on_cursor_moved`,
+      `App::on_mouse_left_click`.
+20. Update `fractal-app/src/main.rs`: winit 0.30 `ApplicationHandler` event
+    loop — `resumed` creates the window + App, `window_event` dispatches
+    resize / redraw / input, `about_to_wait` requests continuous redraw.
+21. Smoke-test: `cargo run -p fractal-app` opens an 800×600 window showing
+    preset 1; keys 1–5 switch presets, `+`/`-` change iteration depth,
+    mouse click zooms, `Q` quits.
+
+#### Phase 6c — egui HUD overlay
+
+22. Add to `fractal-app/Cargo.toml`: `egui = "0.29"`, `egui-wgpu = "0.29"`,
+    `egui-winit = "0.29"`.
+23. Extend `App` with `egui::Context`, `egui_winit::State`,
+    `egui_wgpu::Renderer`.
+24. Each frame: run egui to produce a semi-transparent HUD panel (top-left)
+    showing preset name, zoom, iteration count, active effects, FPS, and
+    control hints; tessellate and render it in the same render pass after
+    the fullscreen quad.
+25. Feed `WindowEvent`s to `egui_winit::State::on_window_event` first;
+    skip game input if egui reports the event as consumed.
 
 ### Phase 7 — Polish & Performance
 
