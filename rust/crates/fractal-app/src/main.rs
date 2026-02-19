@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use winit::{
     application::ApplicationHandler,
-    event::{ElementState, KeyEvent, WindowEvent},
+    event::{ElementState, KeyEvent, MouseButton, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
@@ -12,9 +12,31 @@ mod app;
 mod input;
 
 use app::App;
+use input::Key;
 
 // ---------------------------------------------------------------------------
-// Handler — winit ApplicationHandler (Phase 8: black wgpu surface)
+// Key mapping — winit PhysicalKey → input::Key
+// ---------------------------------------------------------------------------
+
+fn winit_to_key(code: KeyCode) -> Option<Key> {
+    match code {
+        KeyCode::Digit1 => Some(Key::Digit1),
+        KeyCode::Digit2 => Some(Key::Digit2),
+        KeyCode::Digit3 => Some(Key::Digit3),
+        KeyCode::Digit4 => Some(Key::Digit4),
+        KeyCode::Digit5 => Some(Key::Digit5),
+        KeyCode::Space => Some(Key::Space),
+        KeyCode::Equal => Some(Key::Equal),
+        KeyCode::Minus => Some(Key::Minus),
+        KeyCode::KeyR => Some(Key::R),
+        KeyCode::KeyQ => Some(Key::Q),
+        KeyCode::Escape => Some(Key::Escape),
+        _ => None,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Handler — winit ApplicationHandler (Phase 10: input wired up)
 // ---------------------------------------------------------------------------
 
 struct Handler {
@@ -58,6 +80,9 @@ impl ApplicationHandler for Handler {
                 event_loop.exit();
             }
 
+            // ----------------------------------------------------------------
+            // Keyboard
+            // ----------------------------------------------------------------
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -66,13 +91,42 @@ impl ApplicationHandler for Handler {
                         ..
                     },
                 ..
-            } => match code {
-                KeyCode::KeyQ | KeyCode::Escape => {
-                    log::info!("Q/Escape pressed — exiting");
-                    event_loop.exit();
+            } => {
+                if let Some(key) = winit_to_key(code) {
+                    if let Some(app) = &mut self.app {
+                        if let Some(action) = app.on_key_pressed(key) {
+                            if app.handle_action(action) {
+                                event_loop.exit();
+                            }
+                        }
+                    }
                 }
-                _ => {}
-            },
+            }
+
+            // ----------------------------------------------------------------
+            // Mouse — track cursor position
+            // ----------------------------------------------------------------
+            WindowEvent::CursorMoved { position, .. } => {
+                if let Some(app) = &mut self.app {
+                    app.on_cursor_moved(position.x, position.y);
+                }
+            }
+
+            // ----------------------------------------------------------------
+            // Mouse — left click → zoom
+            // ----------------------------------------------------------------
+            WindowEvent::MouseInput {
+                button: MouseButton::Left,
+                state: ElementState::Pressed,
+                ..
+            } => {
+                if let Some(app) = &mut self.app {
+                    let action = app.on_mouse_left_click();
+                    if app.handle_action(action) {
+                        event_loop.exit();
+                    }
+                }
+            }
 
             // ----------------------------------------------------------------
             // Resize — reconfigure the wgpu surface
@@ -84,7 +138,7 @@ impl ApplicationHandler for Handler {
             }
 
             // ----------------------------------------------------------------
-            // Redraw — clear to black and present
+            // Redraw
             // ----------------------------------------------------------------
             WindowEvent::RedrawRequested => {
                 if let Some(app) = &mut self.app {

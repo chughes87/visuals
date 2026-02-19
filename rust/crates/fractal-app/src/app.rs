@@ -11,8 +11,43 @@ use fractal_gpu::{
 };
 use winit::window::Window;
 
+use crate::input::{apply_zoom, clamp_iterations, InputAction, InputState, Key};
+
 // ---------------------------------------------------------------------------
-// App — Phase 9: Mandelbrot rendered to window
+// Simple FPS counter — logs to console once per second
+// ---------------------------------------------------------------------------
+
+struct FpsCounter {
+    frames: u32,
+    last_report: Instant,
+}
+
+impl FpsCounter {
+    fn new() -> Self {
+        Self {
+            frames: 0,
+            last_report: Instant::now(),
+        }
+    }
+
+    /// Increment the frame count.  Returns the FPS value if a full second has
+    /// elapsed since the last report (so the caller can log it).
+    fn tick(&mut self) -> Option<f32> {
+        self.frames += 1;
+        let elapsed = self.last_report.elapsed().as_secs_f32();
+        if elapsed >= 1.0 {
+            let fps = self.frames as f32 / elapsed;
+            self.frames = 0;
+            self.last_report = Instant::now();
+            Some(fps)
+        } else {
+            None
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// App — Phase 10: input wired up
 // ---------------------------------------------------------------------------
 
 pub struct App {
@@ -31,11 +66,18 @@ pub struct App {
     render_bgl: wgpu::BindGroupLayout,
     render_sampler: wgpu::Sampler,
 
-    // Patch — hardcoded to ClassicMandelbrot for Phase 9
+    // Patch and preset tracking
     patch: Patch,
+    current_preset_idx: usize,
+
+    // Input
+    input: InputState,
+    /// Last known cursor position in physical pixels.
+    cursor_pos: (f64, f64),
 
     // Frame timing
     last_frame: Instant,
+    fps: FpsCounter,
 }
 
 impl App {
@@ -117,7 +159,7 @@ impl App {
         let (render_bgl, render_sampler, render_pipeline) =
             Self::build_render_pipeline(&device, format);
 
-        // ---- Patch ----------------------------------------------------------
+        // ---- Patch (start with ClassicMandelbrot) ---------------------------
         let patch = Preset::ClassicMandelbrot.build();
 
         Self {
@@ -132,13 +174,16 @@ impl App {
             render_bgl,
             render_sampler,
             patch,
+            current_preset_idx: 0,
+            input: InputState::new(),
+            cursor_pos: (0.0, 0.0),
             last_frame: Instant::now(),
+            fps: FpsCounter::new(),
         }
     }
 
     // -------------------------------------------------------------------------
-    // Build (or rebuild) the fullscreen-quad render pipeline.
-    // Called at init and not needed on resize (pipeline is resolution-agnostic).
+    // Build the fullscreen-quad render pipeline (resolution-agnostic).
     // -------------------------------------------------------------------------
 
     fn build_render_pipeline(
@@ -240,6 +285,95 @@ impl App {
     }
 
     // -------------------------------------------------------------------------
+    // Input — called by main.rs window_event handler
+    // -------------------------------------------------------------------------
+
+    /// Translate a key press and return the resulting action, if any.
+    pub fn on_key_pressed(&self, key: Key) -> Option<InputAction> {
+        self.input.on_key(key)
+    }
+
+    /// Track the cursor position in physical pixels and update patch mouse params.
+    pub fn on_cursor_moved(&mut self, x: f64, y: f64) {
+        self.cursor_pos = (x, y);
+        // Normalise to [0, 1] for the MouseModulator
+        let w = self.surface_config.width as f64;
+        let h = self.surface_config.height as f64;
+        self.patch.params.mouse_x = (x / w) as f32;
+        self.patch.params.mouse_y = (y / h) as f32;
+    }
+
+    /// Produce a MouseZoom action from the last known cursor position.
+    pub fn on_mouse_left_click(&self) -> InputAction {
+        let w = self.surface_config.width as f64;
+        let h = self.surface_config.height as f64;
+        let norm_x = (self.cursor_pos.0 / w) as f32;
+        let norm_y = (self.cursor_pos.1 / h) as f32;
+        self.input.on_mouse_click(norm_x, norm_y)
+    }
+
+    /// Apply an action to the app state.
+    ///
+    /// Returns `true` if the app should exit (i.e. action was `Quit`).
+    pub fn handle_action(&mut self, action: InputAction) -> bool {
+        match action {
+            InputAction::LoadPreset(preset) => {
+                log::info!("Loading preset: {}", preset.name());
+                if let Some(idx) = Preset::ALL.iter().position(|&p| p == preset) {
+                    self.current_preset_idx = idx;
+                }
+                self.patch = preset.build();
+            }
+
+            InputAction::CycleNextPreset => {
+                self.current_preset_idx = (self.current_preset_idx + 1) % Preset::ALL.len();
+                let preset = Preset::ALL[self.current_preset_idx];
+                log::info!("Cycling to preset: {}", preset.name());
+                self.patch = preset.build();
+            }
+
+            InputAction::IterationsUp => {
+                self.patch.params.max_iter =
+                    clamp_iterations(self.patch.params.max_iter.saturating_add(10));
+                log::debug!("max_iter → {}", self.patch.params.max_iter);
+            }
+
+            InputAction::IterationsDown => {
+                self.patch.params.max_iter =
+                    clamp_iterations(self.patch.params.max_iter.saturating_sub(10));
+                log::debug!("max_iter → {}", self.patch.params.max_iter);
+            }
+
+            InputAction::Reset => {
+                let preset = Preset::ALL[self.current_preset_idx];
+                log::info!("Reset to preset defaults: {}", preset.name());
+                self.patch = preset.build();
+            }
+
+            InputAction::MouseZoom { norm_x, norm_y } => {
+                let w = self.surface_config.width as f32;
+                let h = self.surface_config.height as f32;
+                let aspect = w / h;
+                let (cx, cy, zoom) = apply_zoom(
+                    self.patch.params.center_x,
+                    self.patch.params.center_y,
+                    self.patch.params.zoom,
+                    norm_x,
+                    norm_y,
+                    aspect,
+                );
+                self.patch.params.center_x = cx;
+                self.patch.params.center_y = cy;
+                self.patch.params.zoom = zoom;
+                log::debug!("Zoom → {:.4}  center ({:.6}, {:.6})", zoom, cx, cy);
+            }
+
+            InputAction::Quit => return true,
+        }
+        false
+    }
+
+    // -------------------------------------------------------------------------
     // Render
     // -------------------------------------------------------------------------
 
@@ -250,6 +384,16 @@ impl App {
         let dt = now.duration_since(self.last_frame).as_secs_f32();
         self.last_frame = now;
         self.patch.tick(dt);
+
+        if let Some(fps) = self.fps.tick() {
+            log::debug!(
+                "FPS: {:.1}  preset: {}  zoom: {:.2}  iter: {}",
+                fps,
+                Preset::ALL[self.current_preset_idx].name(),
+                self.patch.params.zoom,
+                self.patch.params.max_iter,
+            );
+        }
 
         let width = self.surface_config.width;
         let height = self.surface_config.height;
@@ -267,8 +411,7 @@ impl App {
             _pad2: [0.0, 0.0],
         };
 
-        // Snapshot what kind of generator and effects to dispatch (avoids
-        // holding a borrow on self.patch during the GPU calls).
+        // Snapshot kinds before GPU calls (avoids borrowing self.patch during dispatch).
         let gen_kind = self.patch.generator.kind();
         let effect_kinds: Vec<_> = self.patch.effects.iter().map(|e| e.kind(params)).collect();
 
