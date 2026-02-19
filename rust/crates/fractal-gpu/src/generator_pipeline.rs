@@ -247,7 +247,10 @@ mod tests {
         // At zoom=2 the same pixel should be half as far from center as at zoom=1.
         let (rx1, _) = complex_for_pixel(0.0, 300.0, 800.0, 600.0, 1.0, 0.0, 0.0);
         let (rx2, _) = complex_for_pixel(0.0, 300.0, 800.0, 600.0, 2.0, 0.0, 0.0);
-        assert!((rx2 - rx1 / 2.0).abs() < 1e-6, "zoom=1 edge={rx1}, zoom=2 edge={rx2}");
+        assert!(
+            (rx2 - rx1 / 2.0).abs() < 1e-6,
+            "zoom=1 edge={rx1}, zoom=2 edge={rx2}"
+        );
     }
 
     // --- Mandelbrot iteration (mirrors shader loop) --------------------------
@@ -357,7 +360,10 @@ mod tests {
         // proving the abs() transform has a real effect.
         let (mi, _, _) = mandelbrot_iter(-1.76, -0.02, 200);
         let (bi, _, _) = burning_ship_iter(-1.76, -0.02, 200);
-        assert_ne!(mi, bi, "Mandelbrot and BurningShip should differ at c=(-1.76,-0.02)");
+        assert_ne!(
+            mi, bi,
+            "Mandelbrot and BurningShip should differ at c=(-1.76,-0.02)"
+        );
     }
 
     // --- GPU smoke test (requires adapter, skipped in CI) --------------------
