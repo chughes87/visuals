@@ -1,8 +1,8 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use fractal_core::presets::Preset;
 use fractal_core::patch::Patch;
+use fractal_core::presets::Preset;
 use fractal_gpu::{
     context::Uniforms,
     effect_pipeline::{EffectPass, PingPong},
@@ -270,12 +270,7 @@ impl App {
         // Snapshot what kind of generator and effects to dispatch (avoids
         // holding a borrow on self.patch during the GPU calls).
         let gen_kind = self.patch.generator.kind();
-        let effect_kinds: Vec<_> = self
-            .patch
-            .effects
-            .iter()
-            .map(|e| e.kind(params))
-            .collect();
+        let effect_kinds: Vec<_> = self.patch.effects.iter().map(|e| e.kind(params)).collect();
 
         // --- Acquire surface texture -----------------------------------------
         let output = self.surface.get_current_texture()?;
