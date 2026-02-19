@@ -21,8 +21,8 @@ pub struct Params {
     pub mouse_y: f32,
 }
 
-impl Params {
-    pub fn default() -> Self {
+impl Default for Params {
+    fn default() -> Self {
         Self {
             fields: HashMap::new(),
             time: 0.0,
@@ -35,7 +35,9 @@ impl Params {
             mouse_y: 0.0,
         }
     }
+}
 
+impl Params {
     pub fn get(&self, key: &str) -> f32 {
         *self.fields.get(key).unwrap_or(&0.0)
     }
@@ -61,12 +63,29 @@ pub enum GeneratorKind {
 /// Describes which effect to apply and its configuration.
 #[derive(Debug, Clone)]
 pub enum EffectKind {
-    ColorMap { scheme: ColorScheme },
-    Ripple { frequency: f32, amplitude: f32, speed: f32 },
-    Echo { layers: u32, offset: f32, decay: f32 },
-    HueShift { amount: f32 },
-    BrightnessContrast { brightness: f32, contrast: f32 },
-    MotionBlur { opacity: f32 },
+    ColorMap {
+        scheme: ColorScheme,
+    },
+    Ripple {
+        frequency: f32,
+        amplitude: f32,
+        speed: f32,
+    },
+    Echo {
+        layers: u32,
+        offset: f32,
+        decay: f32,
+    },
+    HueShift {
+        amount: f32,
+    },
+    BrightnessContrast {
+        brightness: f32,
+        contrast: f32,
+    },
+    MotionBlur {
+        opacity: f32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -89,4 +108,104 @@ pub trait Effect: Send + Sync {
 
 pub trait Modulator: Send + Sync {
     fn modulate(&self, params: &mut Params);
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- Params ----------------------------------------------------------------
+
+    #[test]
+    fn params_default_values() {
+        let p = Params::default();
+        assert_eq!(p.zoom, 1.0);
+        assert_eq!(p.center_x, -0.5);
+        assert_eq!(p.center_y, 0.0);
+        assert_eq!(p.max_iter, 100);
+        assert_eq!(p.time, 0.0);
+        assert_eq!(p.frame, 0);
+        assert_eq!(p.mouse_x, 0.0);
+        assert_eq!(p.mouse_y, 0.0);
+        assert!(p.fields.is_empty());
+    }
+
+    #[test]
+    fn params_set_and_get() {
+        let mut p = Params::default();
+        p.set("foo", 3.14);
+        assert!((p.get("foo") - 3.14).abs() < 1e-6);
+    }
+
+    #[test]
+    fn params_get_missing_returns_zero() {
+        let p = Params::default();
+        assert_eq!(p.get("nonexistent"), 0.0);
+    }
+
+    #[test]
+    fn params_set_overwrites() {
+        let mut p = Params::default();
+        p.set("x", 1.0);
+        p.set("x", 2.0);
+        assert_eq!(p.get("x"), 2.0);
+    }
+
+    // --- GeneratorKind ---------------------------------------------------------
+
+    #[test]
+    fn generator_kind_eq() {
+        assert_eq!(GeneratorKind::Mandelbrot, GeneratorKind::Mandelbrot);
+        assert_ne!(GeneratorKind::Julia, GeneratorKind::BurningShip);
+        assert_ne!(GeneratorKind::NoiseField, GeneratorKind::Mandelbrot);
+    }
+
+    // --- EffectKind ------------------------------------------------------------
+
+    #[test]
+    fn effect_kind_matches() {
+        let e = EffectKind::HueShift { amount: 1.5 };
+        assert!(matches!(e, EffectKind::HueShift { .. }));
+
+        let e2 = EffectKind::Ripple {
+            frequency: 0.1,
+            amplitude: 5.0,
+            speed: 1.0,
+        };
+        assert!(matches!(e2, EffectKind::Ripple { .. }));
+    }
+
+    #[test]
+    fn effect_kind_echo_fields() {
+        let e = EffectKind::Echo {
+            layers: 3,
+            offset: 0.5,
+            decay: 0.8,
+        };
+        if let EffectKind::Echo {
+            layers,
+            offset,
+            decay,
+        } = e
+        {
+            assert_eq!(layers, 3);
+            assert!((offset - 0.5).abs() < 1e-6);
+            assert!((decay - 0.8).abs() < 1e-6);
+        } else {
+            panic!("wrong variant");
+        }
+    }
+
+    // --- ColorScheme -----------------------------------------------------------
+
+    #[test]
+    fn color_scheme_eq() {
+        assert_eq!(ColorScheme::Classic, ColorScheme::Classic);
+        assert_ne!(ColorScheme::Fire, ColorScheme::Ocean);
+        assert_ne!(ColorScheme::Psychedelic, ColorScheme::Classic);
+    }
 }

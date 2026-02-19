@@ -9,3 +9,6 @@ wgpu = "22"
 bytemuck = { version = "1", features = ["derive"] }
 glam = "0.28"
 log = "0.4"
+
+[dev-dependencies]
+pollster = "0.3"
