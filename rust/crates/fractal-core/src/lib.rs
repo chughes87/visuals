@@ -103,11 +103,143 @@ pub trait Generator: Send + Sync {
 }
 
 pub trait Effect: Send + Sync {
-    fn kind(&self) -> EffectKind;
+    /// Return the GPU-ready descriptor for this effect, optionally reading
+    /// dynamic parameters from `params` (e.g. an LFO-driven hue amount).
+    fn kind(&self, params: &Params) -> EffectKind;
 }
 
 pub trait Modulator: Send + Sync {
     fn modulate(&self, params: &mut Params);
+}
+
+// ---------------------------------------------------------------------------
+// Concrete generator implementations
+// ---------------------------------------------------------------------------
+
+/// Mandelbrot set — z_{n+1} = z_n² + c, z_0 = 0.
+pub struct MandelbrotGen;
+impl Generator for MandelbrotGen {
+    fn kind(&self) -> GeneratorKind {
+        GeneratorKind::Mandelbrot
+    }
+    fn gen_param_keys(&self) -> &[&'static str] {
+        &[]
+    }
+}
+
+/// Julia set — z_{n+1} = z_n² + c, z_0 = pixel.
+///
+/// The constant `c` is stored in `Params::fields["julia_cx"]` and
+/// `["julia_cy"]` so that the GPU layer can read it when building `Uniforms`.
+pub struct JuliaGen;
+impl Generator for JuliaGen {
+    fn kind(&self) -> GeneratorKind {
+        GeneratorKind::Julia
+    }
+    fn gen_param_keys(&self) -> &[&'static str] {
+        &["julia_cx", "julia_cy"]
+    }
+}
+
+/// Burning Ship fractal — Mandelbrot with |z.re| and |z.im| each iteration.
+pub struct BurningShipGen;
+impl Generator for BurningShipGen {
+    fn kind(&self) -> GeneratorKind {
+        GeneratorKind::BurningShip
+    }
+    fn gen_param_keys(&self) -> &[&'static str] {
+        &[]
+    }
+}
+
+/// Noise field — 4-octave FBM animated with `time`.
+pub struct NoiseFieldGen;
+impl Generator for NoiseFieldGen {
+    fn kind(&self) -> GeneratorKind {
+        GeneratorKind::NoiseField
+    }
+    fn gen_param_keys(&self) -> &[&'static str] {
+        &[]
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Concrete effect implementations
+// ---------------------------------------------------------------------------
+
+/// Apply a fixed color-map scheme to the escape-time value.
+pub struct ColorMapEffect(pub ColorScheme);
+impl Effect for ColorMapEffect {
+    fn kind(&self, _: &Params) -> EffectKind {
+        EffectKind::ColorMap { scheme: self.0 }
+    }
+}
+
+/// Rotate hue by an amount (radians) read from a `Params` key each frame,
+/// enabling LFO-driven hue animation.
+pub struct HueShiftEffect(pub &'static str);
+impl Effect for HueShiftEffect {
+    fn kind(&self, params: &Params) -> EffectKind {
+        EffectKind::HueShift {
+            amount: params.get(self.0),
+        }
+    }
+}
+
+/// UV-warp ripple distortion whose amplitude is read from a `Params` key each
+/// frame, enabling LFO-driven pulsing.
+pub struct RippleEffect {
+    pub frequency: f32,
+    pub amplitude_key: &'static str,
+    pub speed: f32,
+}
+impl Effect for RippleEffect {
+    fn kind(&self, params: &Params) -> EffectKind {
+        EffectKind::Ripple {
+            frequency: self.frequency,
+            amplitude: params.get(self.amplitude_key),
+            speed: self.speed,
+        }
+    }
+}
+
+/// Multi-layer echo / smear with fixed parameters.
+pub struct EchoEffect {
+    pub layers: u32,
+    pub offset: f32,
+    pub decay: f32,
+}
+impl Effect for EchoEffect {
+    fn kind(&self, _: &Params) -> EffectKind {
+        EffectKind::Echo {
+            layers: self.layers,
+            offset: self.offset,
+            decay: self.decay,
+        }
+    }
+}
+
+/// Motion-blur trail with a fixed opacity.
+pub struct MotionBlurEffect(pub f32);
+impl Effect for MotionBlurEffect {
+    fn kind(&self, _: &Params) -> EffectKind {
+        EffectKind::MotionBlur { opacity: self.0 }
+    }
+}
+
+/// Brightness + contrast where brightness is read from a `Params` key each
+/// frame, enabling LFO-driven brightness animation.
+pub struct BrightnessContrastEffect {
+    pub brightness_key: &'static str,
+    pub contrast: f32,
+}
+impl Effect for BrightnessContrastEffect {
+    fn kind(&self, params: &Params) -> EffectKind {
+        EffectKind::BrightnessContrast {
+            brightness: params.get(self.brightness_key),
+            contrast: self.contrast,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
