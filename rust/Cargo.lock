@@ -263,6 +263,7 @@ dependencies = [
  "fractal-core",
  "glam",
  "log",
+ "naga",
  "pollster",
  "wgpu",
 ]

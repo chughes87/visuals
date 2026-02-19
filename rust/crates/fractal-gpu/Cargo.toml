@@ -12,3 +12,4 @@ log = "0.4"
 
 [dev-dependencies]
 pollster = "0.3"
+naga = { version = "22", features = ["wgsl-in"] }
