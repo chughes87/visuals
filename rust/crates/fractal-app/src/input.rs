@@ -36,11 +36,13 @@ pub enum InputAction {
     IterationsDown,
     Reset,
     Quit,
-    /// Zoom in 2× centred on a normalised screen position.
-    /// `norm_x` and `norm_y` are in \[0, 1\] (0 = left/top, 1 = right/bottom).
-    MouseZoom {
-        norm_x: f32,
-        norm_y: f32,
+    /// Zoom into a rubber-band selection rectangle.
+    /// Coordinates are normalised screen fractions in \[0, 1\].
+    BoxZoom {
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
     },
 }
 
@@ -70,40 +72,38 @@ impl InputState {
             Key::Q | Key::Escape => Some(InputAction::Quit),
         }
     }
-
-    /// Produce a `MouseZoom` action from a normalised click position.
-    pub fn on_mouse_click(&self, norm_x: f32, norm_y: f32) -> InputAction {
-        InputAction::MouseZoom { norm_x, norm_y }
-    }
 }
 
 // ---------------------------------------------------------------------------
 // Zoom math (pure, testable)
 // ---------------------------------------------------------------------------
 
-/// Apply a zoom-in-2× action to the current view, returning
+/// Zoom into a rubber-band selection box, returning
 /// `(new_center_x, new_center_y, new_zoom)`.
 ///
-/// The shader maps pixels via:
+/// `x1/y1` and `x2/y2` are the opposite corners of the selection in
+/// normalised screen coords [0, 1].  The shader maps pixels via:
 ///   uv = (px - resolution*0.5) / (zoom * resolution.y * 0.5)
-/// so the screen spans ±1/zoom from center.  A click at (norm_x, norm_y)
-/// corresponds to the complex point:
-///   cx + (norm_x - 0.5) * 2*aspect/zoom
-///   cy + (norm_y - 0.5) * 2/zoom
-/// We move the center to that point so the clicked location becomes the new
-/// center after doubling the zoom.
-pub fn apply_zoom(
+/// so the screen spans ±1/zoom vertically (±aspect/zoom horizontally).
+/// The new center is the complex midpoint of the selection; the new zoom
+/// is chosen so the larger normalised dimension of the box fills the screen.
+pub fn apply_box_zoom(
     cx: f32,
     cy: f32,
     zoom: f32,
-    norm_x: f32,
-    norm_y: f32,
+    x1: f32,
+    y1: f32,
+    x2: f32,
+    y2: f32,
     aspect: f32, // width / height
 ) -> (f32, f32, f32) {
+    let dx = (x2 - x1).abs().max(1e-6);
+    let dy = (y2 - y1).abs().max(1e-6);
     let scale = 2.0 / zoom;
-    let new_cx = cx + (norm_x - 0.5) * scale * aspect;
-    let new_cy = cy + (norm_y - 0.5) * scale;
-    (new_cx, new_cy, zoom * 2.0)
+    let new_cx = cx + ((x1 + x2) * 0.5 - 0.5) * scale * aspect;
+    let new_cy = cy + ((y1 + y2) * 0.5 - 0.5) * scale;
+    let new_zoom = zoom / dx.max(dy);
+    (new_cx, new_cy, new_zoom)
 }
 
 // ---------------------------------------------------------------------------
@@ -229,71 +229,53 @@ mod tests {
         }
     }
 
-    // --- Mouse click ----------------------------------------------------------
+    // --- Box zoom math --------------------------------------------------------
 
     #[test]
-    fn mouse_click_produces_zoom_action() {
-        assert_eq!(
-            input().on_mouse_click(0.25, 0.75),
-            InputAction::MouseZoom {
-                norm_x: 0.25,
-                norm_y: 0.75
-            }
-        );
+    fn box_zoom_full_screen_no_change() {
+        // Selecting the entire screen should leave center and zoom unchanged.
+        let (cx, cy, z) = apply_box_zoom(0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0);
+        assert!((cx - 0.0).abs() < 1e-5, "cx={cx}");
+        assert!((cy - 0.0).abs() < 1e-5, "cy={cy}");
+        assert!((z - 1.0).abs() < 1e-5, "z={z}");
     }
 
     #[test]
-    fn mouse_click_preserves_coordinates() {
-        let action = input().on_mouse_click(0.123, 0.456);
-        if let InputAction::MouseZoom { norm_x, norm_y } = action {
-            assert!((norm_x - 0.123).abs() < 1e-6);
-            assert!((norm_y - 0.456).abs() < 1e-6);
-        } else {
-            panic!("expected MouseZoom");
-        }
-    }
-
-    // --- Zoom math ------------------------------------------------------------
-
-    #[test]
-    fn zoom_at_center_does_not_pan() {
-        // Clicking the exact screen centre must not shift the view centre.
-        let (cx, cy, zoom) = apply_zoom(-0.5, 0.0, 1.0, 0.5, 0.5, 4.0 / 3.0);
-        assert!((cx - (-0.5)).abs() < 1e-5, "cx={cx}");
-        assert!(cy.abs() < 1e-5, "cy={cy}");
-        assert!((zoom - 2.0).abs() < 1e-5, "zoom={zoom}");
+    fn box_zoom_center_half_screen_doubles_zoom() {
+        // Selecting the centre quarter (half each axis) should double zoom.
+        let (cx, cy, z) = apply_box_zoom(0.0, 0.0, 1.0, 0.25, 0.25, 0.75, 0.75, 1.0);
+        assert!((cx - 0.0).abs() < 1e-5, "cx={cx}");
+        assert!((cy - 0.0).abs() < 1e-5, "cy={cy}");
+        assert!((z - 2.0).abs() < 1e-5, "z={z}");
     }
 
     #[test]
-    fn zoom_doubles_each_click() {
-        let (_, _, z1) = apply_zoom(0.0, 0.0, 1.0, 0.5, 0.5, 1.0);
-        let (_, _, z2) = apply_zoom(0.0, 0.0, z1, 0.5, 0.5, 1.0);
-        assert!((z1 - 2.0).abs() < 1e-5);
-        assert!((z2 - 4.0).abs() < 1e-5);
+    fn box_zoom_top_left_quadrant_pans_left_and_up() {
+        let (cx, cy, _) = apply_box_zoom(0.0, 0.0, 1.0, 0.0, 0.0, 0.5, 0.5, 1.0);
+        assert!(cx < 0.0, "expected cx<0, got {cx}");
+        assert!(cy < 0.0, "expected cy<0, got {cy}");
     }
 
     #[test]
-    fn zoom_top_left_shifts_center_left_and_up() {
-        let (cx, cy, _) = apply_zoom(0.0, 0.0, 1.0, 0.0, 0.0, 1.0);
-        assert!(cx < 0.0, "expected cx < 0, got {cx}");
-        assert!(cy < 0.0, "expected cy < 0, got {cy}");
+    fn box_zoom_bottom_right_quadrant_pans_right_and_down() {
+        let (cx, cy, _) = apply_box_zoom(0.0, 0.0, 1.0, 0.5, 0.5, 1.0, 1.0, 1.0);
+        assert!(cx > 0.0, "expected cx>0, got {cx}");
+        assert!(cy > 0.0, "expected cy>0, got {cy}");
     }
 
     #[test]
-    fn zoom_bottom_right_shifts_center_right_and_down() {
-        let (cx, cy, _) = apply_zoom(0.0, 0.0, 1.0, 1.0, 1.0, 1.0);
-        assert!(cx > 0.0, "expected cx > 0, got {cx}");
-        assert!(cy > 0.0, "expected cy > 0, got {cy}");
+    fn box_zoom_limited_by_larger_dimension() {
+        // dx=0.5, dy=0.25 → larger dim is dx → new_zoom = 1.0/0.5 = 2
+        let (_, _, z) = apply_box_zoom(0.0, 0.0, 1.0, 0.25, 0.375, 0.75, 0.625, 1.0);
+        assert!((z - 2.0).abs() < 1e-5, "z={z}");
     }
 
     #[test]
-    fn zoom_higher_zoom_produces_smaller_pan() {
-        // At 2× zoom the same off-centre click should move the centre
-        // half as far as at 1× zoom.
-        let (cx1, cy1, _) = apply_zoom(0.0, 0.0, 1.0, 0.0, 0.0, 1.0);
-        let (cx2, cy2, _) = apply_zoom(0.0, 0.0, 2.0, 0.0, 0.0, 1.0);
-        assert!((cx2 - cx1 / 2.0).abs() < 1e-5, "cx1={cx1} cx2={cx2}");
-        assert!((cy2 - cy1 / 2.0).abs() < 1e-5, "cy1={cy1} cy2={cy2}");
+    fn box_zoom_higher_base_zoom_scales_proportionally() {
+        // At 2× base zoom, same fractional selection gives twice the final zoom.
+        let (_, _, z1) = apply_box_zoom(0.0, 0.0, 1.0, 0.25, 0.25, 0.75, 0.75, 1.0);
+        let (_, _, z2) = apply_box_zoom(0.0, 0.0, 2.0, 0.25, 0.25, 0.75, 0.75, 1.0);
+        assert!((z2 - z1 * 2.0).abs() < 1e-5, "z1={z1} z2={z2}");
     }
 
     // --- Iteration clamping ---------------------------------------------------

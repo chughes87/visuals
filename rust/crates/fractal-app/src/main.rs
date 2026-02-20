@@ -121,7 +121,7 @@ impl ApplicationHandler for Handler {
             }
 
             // ----------------------------------------------------------------
-            // Mouse — left click → zoom (skip if egui consumed)
+            // Mouse — left button: press starts drag, release applies box zoom
             // ----------------------------------------------------------------
             WindowEvent::MouseInput {
                 button: MouseButton::Left,
@@ -129,9 +129,24 @@ impl ApplicationHandler for Handler {
                 ..
             } if !egui_consumed => {
                 if let Some(app) = &mut self.app {
-                    let action = app.on_mouse_left_click();
-                    if app.handle_action(action) {
-                        event_loop.exit();
+                    app.on_mouse_press();
+                }
+            }
+
+            WindowEvent::MouseInput {
+                button: MouseButton::Left,
+                state: ElementState::Released,
+                ..
+            } => {
+                if let Some(app) = &mut self.app {
+                    // Always clear drag state; only act if egui didn't consume.
+                    let action = app.on_mouse_release();
+                    if !egui_consumed {
+                        if let Some(action) = action {
+                            if app.handle_action(action) {
+                                event_loop.exit();
+                            }
+                        }
                     }
                 }
             }

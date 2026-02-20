@@ -11,7 +11,7 @@ use fractal_gpu::{
 use winit::event::WindowEvent;
 use winit::window::Window;
 
-use crate::input::{apply_zoom, clamp_iterations, InputAction, InputState, Key};
+use crate::input::{apply_box_zoom, clamp_iterations, InputAction, InputState, Key};
 
 // ---------------------------------------------------------------------------
 // FPS counter — tracks frame rate, exposes last known value for the HUD
@@ -98,6 +98,8 @@ pub struct App {
     input: InputState,
     /// Last known cursor position in physical pixels.
     cursor_pos: (f64, f64),
+    /// Set when the left button is pressed; cleared on release.
+    drag_start: Option<(f64, f64)>,
 
     // Frame timing
     last_frame: Instant,
@@ -217,6 +219,7 @@ impl App {
             current_preset_idx: 0,
             input: InputState::new(),
             cursor_pos: (0.0, 0.0),
+            drag_start: None,
             last_frame: Instant::now(),
             fps: FpsCounter::new(),
             egui_ctx,
@@ -353,12 +356,28 @@ impl App {
         self.patch.params.mouse_y = (y / h) as f32;
     }
 
-    pub fn on_mouse_left_click(&self) -> InputAction {
+    pub fn on_mouse_press(&mut self) {
+        self.drag_start = Some(self.cursor_pos);
+    }
+
+    /// Called on left-button release.  Always clears the drag state and
+    /// returns a `BoxZoom` action when the drag was large enough (≥ 5 px in
+    /// both axes), or `None` for a tiny/accidental drag.
+    pub fn on_mouse_release(&mut self) -> Option<InputAction> {
+        let start = self.drag_start.take()?;
+        let dx_px = (self.cursor_pos.0 - start.0).abs();
+        let dy_px = (self.cursor_pos.1 - start.1).abs();
+        if dx_px < 5.0 || dy_px < 5.0 {
+            return None;
+        }
         let w = self.surface_config.width as f64;
         let h = self.surface_config.height as f64;
-        let norm_x = (self.cursor_pos.0 / w) as f32;
-        let norm_y = (self.cursor_pos.1 / h) as f32;
-        self.input.on_mouse_click(norm_x, norm_y)
+        Some(InputAction::BoxZoom {
+            x1: (start.0 / w) as f32,
+            y1: (start.1 / h) as f32,
+            x2: (self.cursor_pos.0 / w) as f32,
+            y2: (self.cursor_pos.1 / h) as f32,
+        })
     }
 
     /// Returns `true` if the app should exit.
@@ -397,22 +416,24 @@ impl App {
                 self.patch = preset.build();
             }
 
-            InputAction::MouseZoom { norm_x, norm_y } => {
+            InputAction::BoxZoom { x1, y1, x2, y2 } => {
                 let w = self.surface_config.width as f32;
                 let h = self.surface_config.height as f32;
                 let aspect = w / h;
-                let (cx, cy, zoom) = apply_zoom(
+                let (cx, cy, zoom) = apply_box_zoom(
                     self.patch.params.center_x,
                     self.patch.params.center_y,
                     self.patch.params.zoom,
-                    norm_x,
-                    norm_y,
+                    x1,
+                    y1,
+                    x2,
+                    y2,
                     aspect,
                 );
                 self.patch.params.center_x = cx;
                 self.patch.params.center_y = cy;
                 self.patch.params.zoom = zoom;
-                log::debug!("Zoom → {:.4}  center ({:.6}, {:.6})", zoom, cx, cy);
+                log::debug!("BoxZoom → {:.4}  center ({:.6}, {:.6})", zoom, cx, cy);
             }
 
             InputAction::Quit => return true,
@@ -470,9 +491,10 @@ impl App {
         let effect_labels: Vec<&'static str> = effect_kinds.iter().map(effect_name).collect();
 
         let cursor_pos = self.cursor_pos;
+        let drag_start = self.drag_start;
         let raw_input = self.egui_state.take_egui_input(&self.window);
         let full_output = self.egui_ctx.run(raw_input, |ctx| {
-            // --- Cursor zoom indicator: crosshair + ring at mouse position ----
+            // --- Zoom indicator ----------------------------------------------
             let ppp = ctx.pixels_per_point();
             let cur = egui::pos2(cursor_pos.0 as f32 / ppp, cursor_pos.1 as f32 / ppp);
             let painter = ctx.layer_painter(egui::LayerId::new(
@@ -481,21 +503,34 @@ impl App {
             ));
             let color = egui::Color32::from_rgba_unmultiplied(255, 255, 80, 210);
             let stroke = egui::Stroke::new(1.5, color);
-            painter.circle_stroke(cur, 14.0, stroke);
-            painter.line_segment(
-                [
-                    egui::pos2(cur.x - 9.0, cur.y),
-                    egui::pos2(cur.x + 9.0, cur.y),
-                ],
-                stroke,
-            );
-            painter.line_segment(
-                [
-                    egui::pos2(cur.x, cur.y - 9.0),
-                    egui::pos2(cur.x, cur.y + 9.0),
-                ],
-                stroke,
-            );
+            if let Some(start) = drag_start {
+                // Draw rubber-band selection rectangle while dragging
+                let start_pt = egui::pos2(start.0 as f32 / ppp, start.1 as f32 / ppp);
+                let rect = egui::Rect::from_two_pos(start_pt, cur);
+                painter.rect_filled(
+                    rect,
+                    0.0,
+                    egui::Color32::from_rgba_unmultiplied(255, 255, 80, 25),
+                );
+                painter.rect_stroke(rect, 0.0, stroke);
+            } else {
+                // Draw crosshair + ring at cursor when not dragging
+                painter.circle_stroke(cur, 14.0, stroke);
+                painter.line_segment(
+                    [
+                        egui::pos2(cur.x - 9.0, cur.y),
+                        egui::pos2(cur.x + 9.0, cur.y),
+                    ],
+                    stroke,
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(cur.x, cur.y - 9.0),
+                        egui::pos2(cur.x, cur.y + 9.0),
+                    ],
+                    stroke,
+                );
+            }
 
             egui::Window::new("Fractal Explorer")
                 .anchor(egui::Align2::LEFT_TOP, [10.0, 10.0])
@@ -519,7 +554,7 @@ impl App {
                     ui.separator();
                     ui.label("1–5  load preset   Space  cycle");
                     ui.label("+/-  iterations    R  reset");
-                    ui.label("Click  zoom        Q/Esc  quit");
+                    ui.label("Drag   zoom box    Q/Esc  quit");
                 });
         });
         self.egui_state
