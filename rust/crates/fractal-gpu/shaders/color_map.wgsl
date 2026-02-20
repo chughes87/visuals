@@ -20,7 +20,7 @@ struct EffectParams {
 @group(0) @binding(0) var<uniform>  u      : Uniforms;
 @group(0) @binding(1) var<uniform>  ep     : EffectParams;
 @group(0) @binding(2) var           input  : texture_2d<f32>;
-@group(0) @binding(3) var           output : texture_storage_2d<rgba32float, write>;
+@group(0) @binding(3) var           output : texture_storage_2d<rgba16float, write>;
 
 fn classic(t: f32) -> vec3<f32> {
     return 0.5 + 0.5 * vec3(cos(TAU * (t + 0.0)),

@@ -18,7 +18,7 @@ struct Uniforms {
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
-@group(0) @binding(1) var output: texture_storage_2d<rgba32float, write>;
+@group(0) @binding(1) var output: texture_storage_2d<rgba16float, write>;
 
 // ---------------------------------------------------------------------------
 // Value noise helpers
