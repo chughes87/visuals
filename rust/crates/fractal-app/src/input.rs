@@ -84,13 +84,14 @@ impl InputState {
 /// Apply a zoom-in-2× action to the current view, returning
 /// `(new_center_x, new_center_y, new_zoom)`.
 ///
-/// Mirrors the Clojure `mouse-clicked` formula:
-/// ```text
-/// scale   = 4.0 / zoom
-/// new_cx  = cx + (norm_x - 0.5) * scale * aspect
-/// new_cy  = cy + (norm_y - 0.5) * scale
-/// new_zoom = zoom * 2.0
-/// ```
+/// The shader maps pixels via:
+///   uv = (px - resolution*0.5) / (zoom * resolution.y * 0.5)
+/// so the screen spans ±1/zoom from center.  A click at (norm_x, norm_y)
+/// corresponds to the complex point:
+///   cx + (norm_x - 0.5) * 2*aspect/zoom
+///   cy + (norm_y - 0.5) * 2/zoom
+/// We move the center to that point so the clicked location becomes the new
+/// center after doubling the zoom.
 pub fn apply_zoom(
     cx: f32,
     cy: f32,
@@ -99,7 +100,7 @@ pub fn apply_zoom(
     norm_y: f32,
     aspect: f32, // width / height
 ) -> (f32, f32, f32) {
-    let scale = 4.0 / zoom;
+    let scale = 2.0 / zoom;
     let new_cx = cx + (norm_x - 0.5) * scale * aspect;
     let new_cy = cy + (norm_y - 0.5) * scale;
     (new_cx, new_cy, zoom * 2.0)
