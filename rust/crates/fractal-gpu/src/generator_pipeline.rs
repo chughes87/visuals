@@ -15,7 +15,7 @@ pub struct GeneratorPass {
     bind_group_layout: BindGroupLayout,
     uniform_buf: Buffer,
 
-    /// rgba32float texture written by the active generator each frame.
+    /// rgba16float texture written by the active generator each frame.
     pub output_tex: Texture,
     pub output_view: TextureView,
     pub width: u32,
@@ -26,7 +26,7 @@ impl GeneratorPass {
     pub fn new(device: &Device, width: u32, height: u32) -> Self {
         // --- bind group layout -------------------------------------------------
         // binding 0 : Uniforms uniform buffer
-        // binding 1 : rgba32float storage texture (write-only)
+        // binding 1 : rgba16float storage texture (write-only)
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("gen_bgl"),
             entries: &[
@@ -45,7 +45,7 @@ impl GeneratorPass {
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::StorageTexture {
                         access: wgpu::StorageTextureAccess::WriteOnly,
-                        format: wgpu::TextureFormat::Rgba32Float,
+                        format: wgpu::TextureFormat::Rgba16Float,
                         view_dimension: wgpu::TextureViewDimension::D2,
                     },
                     count: None,
@@ -78,7 +78,7 @@ impl GeneratorPass {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba32Float,
+            format: wgpu::TextureFormat::Rgba16Float,
             usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });

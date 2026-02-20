@@ -14,13 +14,15 @@ struct Uniforms {
 }
 struct MotionBlurParams {
     opacity : f32,
-    _pad    : vec3<f32>,
+    _pad0   : f32,
+    _pad1   : f32,
+    _pad2   : f32,
 }
 
 @group(0) @binding(0) var<uniform>  u      : Uniforms;
 @group(0) @binding(1) var<uniform>  mp     : MotionBlurParams;
 @group(0) @binding(2) var           input  : texture_2d<f32>;
-@group(0) @binding(3) var           output : texture_storage_2d<rgba32float, write>;
+@group(0) @binding(3) var           output : texture_storage_2d<rgba16float, write>;
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {

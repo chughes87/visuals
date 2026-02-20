@@ -7,7 +7,7 @@ use crate::context::Uniforms;
 /// 16 bytes fits every effect's parameter struct.
 const PARAMS_SIZE: u64 = 16;
 
-/// Ping-pong texture set — two `rgba32float` storage textures that swap
+/// Ping-pong texture set — two `rgba16float` storage textures that swap
 /// roles each effect pass to avoid read-write hazards.
 pub struct PingPong {
     pub tex_a: wgpu::Texture,
@@ -30,7 +30,7 @@ impl PingPong {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba32Float,
+            format: wgpu::TextureFormat::Rgba16Float,
             usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         };
@@ -463,7 +463,7 @@ fn storage_tex_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
         visibility: wgpu::ShaderStages::COMPUTE,
         ty: wgpu::BindingType::StorageTexture {
             access: wgpu::StorageTextureAccess::WriteOnly,
-            format: wgpu::TextureFormat::Rgba32Float,
+            format: wgpu::TextureFormat::Rgba16Float,
             view_dimension: wgpu::TextureViewDimension::D2,
         },
         count: None,

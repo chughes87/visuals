@@ -10,13 +10,15 @@ struct Uniforms {
 }
 struct HueParams {
     amount : f32,  // radians
-    _pad   : vec3<f32>,
+    _pad0  : f32,
+    _pad1  : f32,
+    _pad2  : f32,
 }
 
 @group(0) @binding(0) var<uniform>  u      : Uniforms;
 @group(0) @binding(1) var<uniform>  hp     : HueParams;
 @group(0) @binding(2) var           input  : texture_2d<f32>;
-@group(0) @binding(3) var           output : texture_storage_2d<rgba32float, write>;
+@group(0) @binding(3) var           output : texture_storage_2d<rgba16float, write>;
 
 // Rotate hue by cycling RGB channels with a rotation matrix in the
 // luminance-preserving YIQ-like space.
