@@ -68,6 +68,33 @@ fn effect_name(kind: &EffectKind) -> &'static str {
 }
 
 // ---------------------------------------------------------------------------
+// Drag-box aspect-ratio constraint
+// ---------------------------------------------------------------------------
+
+/// Clamp the raw drag end point so the resulting rectangle has the same
+/// aspect ratio as the screen.  The box grows to fill whichever dimension
+/// of the drag is the limiting axis.
+fn constrain_drag_end(
+    start: (f64, f64),
+    end: (f64, f64),
+    screen_w: f64,
+    screen_h: f64,
+) -> (f64, f64) {
+    let dx = end.0 - start.0;
+    let dy = end.1 - start.1;
+    // Width-limited when |dx|/screen_w ≤ |dy|/screen_h (i.e. the x fraction
+    // is the smaller one); otherwise height-limited.
+    let (cdx, cdy) = if dx.abs() * screen_h <= dy.abs() * screen_w {
+        // Constrain height to match width at screen aspect.
+        (dx, dx.abs() * screen_h / screen_w * dy.signum())
+    } else {
+        // Constrain width to match height at screen aspect.
+        (dy.abs() * screen_w / screen_h * dx.signum(), dy)
+    };
+    (start.0 + cdx, start.1 + cdy)
+}
+
+// ---------------------------------------------------------------------------
 // App — Phase 11: egui HUD overlay
 // ---------------------------------------------------------------------------
 
@@ -361,22 +388,23 @@ impl App {
     }
 
     /// Called on left-button release.  Always clears the drag state and
-    /// returns a `BoxZoom` action when the drag was large enough (≥ 5 px in
-    /// both axes), or `None` for a tiny/accidental drag.
+    /// returns a `BoxZoom` action when the constrained drag is large enough
+    /// (≥ 5 px in both axes), or `None` for a tiny/accidental drag.
     pub fn on_mouse_release(&mut self) -> Option<InputAction> {
         let start = self.drag_start.take()?;
-        let dx_px = (self.cursor_pos.0 - start.0).abs();
-        let dy_px = (self.cursor_pos.1 - start.1).abs();
-        if dx_px < 5.0 || dy_px < 5.0 {
-            return None;
-        }
         let w = self.surface_config.width as f64;
         let h = self.surface_config.height as f64;
+        let end = constrain_drag_end(start, self.cursor_pos, w, h);
+        let cdx = (end.0 - start.0).abs();
+        let cdy = (end.1 - start.1).abs();
+        if cdx < 5.0 || cdy < 5.0 {
+            return None;
+        }
         Some(InputAction::BoxZoom {
             x1: (start.0 / w) as f32,
             y1: (start.1 / h) as f32,
-            x2: (self.cursor_pos.0 / w) as f32,
-            y2: (self.cursor_pos.1 / h) as f32,
+            x2: (end.0 / w) as f32,
+            y2: (end.1 / h) as f32,
         })
     }
 
@@ -504,9 +532,11 @@ impl App {
             let color = egui::Color32::from_rgba_unmultiplied(255, 255, 80, 210);
             let stroke = egui::Stroke::new(1.5, color);
             if let Some(start) = drag_start {
-                // Draw rubber-band selection rectangle while dragging
+                // Draw aspect-ratio-constrained rubber-band rectangle
+                let end = constrain_drag_end(start, cursor_pos, width as f64, height as f64);
                 let start_pt = egui::pos2(start.0 as f32 / ppp, start.1 as f32 / ppp);
-                let rect = egui::Rect::from_two_pos(start_pt, cur);
+                let end_pt = egui::pos2(end.0 as f32 / ppp, end.1 as f32 / ppp);
+                let rect = egui::Rect::from_two_pos(start_pt, end_pt);
                 painter.rect_filled(
                     rect,
                     0.0,
