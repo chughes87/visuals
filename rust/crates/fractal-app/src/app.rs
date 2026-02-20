@@ -469,8 +469,34 @@ impl App {
         let fps_display = self.fps.fps();
         let effect_labels: Vec<&'static str> = effect_kinds.iter().map(effect_name).collect();
 
+        let cursor_pos = self.cursor_pos;
         let raw_input = self.egui_state.take_egui_input(&self.window);
         let full_output = self.egui_ctx.run(raw_input, |ctx| {
+            // --- Cursor zoom indicator: crosshair + ring at mouse position ----
+            let ppp = ctx.pixels_per_point();
+            let cur = egui::pos2(cursor_pos.0 as f32 / ppp, cursor_pos.1 as f32 / ppp);
+            let painter = ctx.layer_painter(egui::LayerId::new(
+                egui::Order::Tooltip,
+                egui::Id::new("zoom_cursor"),
+            ));
+            let color = egui::Color32::from_rgba_unmultiplied(255, 255, 80, 210);
+            let stroke = egui::Stroke::new(1.5, color);
+            painter.circle_stroke(cur, 14.0, stroke);
+            painter.line_segment(
+                [
+                    egui::pos2(cur.x - 9.0, cur.y),
+                    egui::pos2(cur.x + 9.0, cur.y),
+                ],
+                stroke,
+            );
+            painter.line_segment(
+                [
+                    egui::pos2(cur.x, cur.y - 9.0),
+                    egui::pos2(cur.x, cur.y + 9.0),
+                ],
+                stroke,
+            );
+
             egui::Window::new("Fractal Explorer")
                 .anchor(egui::Align2::LEFT_TOP, [10.0, 10.0])
                 .collapsible(false)
